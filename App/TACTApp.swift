@@ -13,6 +13,7 @@ struct TACTApp: App {
 
 struct AssignmentsView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var summaryWorker = AssignmentSummaryWorker.shared
     @State private var activeTab: Tab = .assignments
     @State private var assignmentPath: [String] = []
     @State private var snapshot: Snapshot?
@@ -28,7 +29,7 @@ struct AssignmentsView: View {
     @State private var errorMessage: String?
     @State private var lastWidgetAttempt: WidgetSyncAttempt?
 
-    private enum Tab { case assignments, timetable }
+    private enum Tab { case assignments, timetable, settings }
 
     private struct RoomEditorRequest: Identifiable {
         let id = UUID()
@@ -49,6 +50,13 @@ struct AssignmentsView: View {
             }
             .tabItem { Label("時間割", systemImage: "tablecells") }
             .tag(Tab.timetable)
+
+            settingsTab
+                .tabItem { Label("設定", systemImage: "gearshape") }
+                .tag(Tab.settings)
+        }
+        .onChange(of: activeTab) { _, tab in
+            if tab == .settings { lastWidgetAttempt = TACTStore.lastWidgetAttempt }
         }
         .task(id: scenePhase) {
             if scenePhase == .active {
@@ -98,7 +106,76 @@ struct AssignmentsView: View {
     private var assignmentTab: some View {
         NavigationStack(path: $assignmentPath) {
             List {
-                Section {
+                if connected, !finishedTimetableRoomSetup,
+                   snapshot?.timetable?.contains(where: AcademicDay(on: .now).isCurrentTerm) == true {
+                    Section {
+                        PhotosPicker(selection: $importPhoto, matching: .images) {
+                            Label("スクリーンショットを選ぶ", systemImage: "photo")
+                        }
+                        Button("教室を手入力") {
+                            roomEditor = RoomEditorRequest(term: .current(), allowsImport: false)
+                        }
+                        Button("あとで", role: .cancel) { finishedTimetableRoomSetup = true }
+                    } header: {
+                        Text("TACT連携完了")
+                    } footer: {
+                        Text("「すごい時間割」を使っている方は、時間割のスクリーンショットから教室をまとめて登録できます。")
+                    }
+                }
+
+                if let snapshot {
+                    Section("未提出の課題・小テスト") {
+                        let assignments = snapshot.upcoming(at: .now)
+                        let summaryIDs = Set(assignments.lazy.filter { $0.isQuiz != true }.prefix(3).map(\.id))
+                        if assignments.isEmpty {
+                            Text((snapshot.failedCourseCount ?? 0) > 0
+                                 ? "取得できた講義に表示できる未提出の課題・小テストはありません。"
+                                 : "表示できる未提出の課題・小テストはありません。")
+                                .foregroundStyle(.secondary)
+                        }
+                        ForEach(assignments) { assignment in
+                            if assignment.isQuiz != true, let account = snapshot.summaryAccount {
+                                NavigationLink(value: assignment.id) {
+                                    assignmentRow(assignment, summaryAccount: summaryIDs.contains(assignment.id) ? account : nil)
+                                }
+                            } else {
+                                assignmentRow(assignment)
+                            }
+                        }
+                    }
+
+                } else if !connected && !hasPendingSession && !syncing {
+                    ContentUnavailableView {
+                        Label("課題を表示するには", systemImage: "checklist")
+                    } description: {
+                        Text("設定からTACTに接続してください。")
+                    } actions: {
+                        Button("設定を開く") { activeTab = .settings }
+                    }
+                } else if syncing {
+                    ProgressView("課題・小テストを取得中")
+                } else {
+                    Button("設定で同期の状態を確認") { activeTab = .settings }
+                }
+            }
+            .navigationTitle("課題・小テスト")
+            .navigationDestination(for: String.self) { id in
+                if let snapshot, let account = snapshot.summaryAccount,
+                   let assignment = snapshot.assignments.first(where: { $0.id == id && $0.isQuiz != true }) {
+                    AssignmentDetailView(assignment: assignment, account: account)
+                        .id(account)
+                } else {
+                    ContentUnavailableView("課題を表示できません", systemImage: "doc.text")
+                }
+            }
+            .refreshable { await sync(force: true) }
+        }
+    }
+
+    private var settingsTab: some View {
+        NavigationStack {
+            List {
+                Section("TACTとの同期") {
                     if connected || hasPendingSession {
                         Button {
                             Task { await sync(force: true) }
@@ -149,59 +226,13 @@ struct AssignmentsView: View {
                     }
                 }
 
-                if connected, !finishedTimetableRoomSetup,
-                   snapshot?.timetable?.contains(where: AcademicDay(on: .now).isCurrentTerm) == true {
-                    Section {
-                        PhotosPicker(selection: $importPhoto, matching: .images) {
-                            Label("スクリーンショットを選ぶ", systemImage: "photo")
-                        }
-                        Button("教室を手入力") {
-                            roomEditor = RoomEditorRequest(term: .current(), allowsImport: false)
-                        }
-                        Button("あとで", role: .cancel) { finishedTimetableRoomSetup = true }
-                    } header: {
-                        Text("TACT連携完了")
-                    } footer: {
-                        Text("「すごい時間割」を使っている方は、時間割のスクリーンショットから教室をまとめて登録できます。")
-                    }
-                }
-
-                if let snapshot {
-                    Section("未提出の課題・小テスト") {
-                        let assignments = snapshot.upcoming(at: .now)
-                        if assignments.isEmpty {
-                            Text((snapshot.failedCourseCount ?? 0) > 0
-                                 ? "取得できた講義に表示できる未提出の課題・小テストはありません。"
-                                 : "表示できる未提出の課題・小テストはありません。")
-                                .foregroundStyle(.secondary)
-                        }
-                        ForEach(assignments) { assignment in
-                            if assignment.isQuiz != true, snapshot.summaryAccount != nil {
-                                NavigationLink(value: assignment.id) { assignmentRow(assignment) }
-                            } else {
-                                assignmentRow(assignment)
-                            }
-                        }
-                    }
-
-                    Link("TACTをブラウザで開く", destination: TACTClient.home)
-                }
+                Link("TACTをブラウザで開く", destination: TACTClient.home)
             }
-            .navigationTitle("課題・小テスト")
-            .navigationDestination(for: String.self) { id in
-                if let snapshot, let account = snapshot.summaryAccount,
-                   let assignment = snapshot.assignments.first(where: { $0.id == id && $0.isQuiz != true }) {
-                    AssignmentDetailView(assignment: assignment, account: account)
-                        .id(account)
-                } else {
-                    ContentUnavailableView("課題を表示できません", systemImage: "doc.text")
-                }
-            }
-            .refreshable { await sync(force: true) }
+            .navigationTitle("設定")
         }
     }
 
-    private func assignmentRow(_ assignment: Assignment) -> some View {
+    private func assignmentRow(_ assignment: Assignment, summaryAccount: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(assignment.title).font(.headline)
             Text(assignment.courseLabel)
@@ -210,6 +241,26 @@ struct AssignmentsView: View {
                     .foregroundStyle(assignment.due < .now ? Color.orange : Color.secondary)
             } else {
                 Text("締切なし").foregroundStyle(.secondary)
+            }
+
+            if let summaryAccount {
+                let preview = AssignmentSummaryStore.preview(for: assignment, account: summaryAccount)
+                if let summary = preview?.text, !summary.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(preview?.includesAllPDFs == false ? "AI要約 · 一部PDF未反映" : "AI要約")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        Text(summary)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                    }
+                    .padding(.top, 6)
+                } else if summaryWorker.processing == assignment.id {
+                    Label("要約を作成中", systemImage: "sparkles")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 6)
+                }
             }
         }
         .padding(.vertical, 4)

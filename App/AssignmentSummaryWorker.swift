@@ -57,7 +57,7 @@ final class AssignmentSummaryWorker: ObservableObject {
         guard foreground, Self.modelAvailable, automaticTask == nil else { return }
         needsForegroundRestart = false
         automaticTask = Task {
-            _ = await processUpcoming(allowance: 2)
+            _ = await processUpcoming(allowance: 3)
             let wasCancelled = Task.isCancelled
             automaticTask = nil
             if wasCancelled && needsForegroundRestart { startAutomaticWork() }
