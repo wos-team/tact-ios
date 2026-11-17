@@ -111,7 +111,7 @@ struct AssignmentsView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button { showsTimetable = true } label: {
-                        Label("時間割", systemImage: "calendar")
+                        Label("教室の登録", systemImage: "calendar")
                     }
                 }
             }
@@ -123,7 +123,7 @@ struct AssignmentsView: View {
                 await sync(force: false)
             }
         }
-        .sheet(isPresented: $showsTimetable) { TimetableEditor() }
+        .sheet(isPresented: $showsTimetable) { TimetableEditor(timetable: snapshot?.timetable) }
         .sheet(isPresented: $showsSignIn) {
             NavigationStack {
                 SignInView { cookies in
@@ -155,7 +155,7 @@ struct AssignmentsView: View {
                 return
             }
             guard let active else { return }
-            if !force, let snapshot, Date().timeIntervalSince(snapshot.syncedAt) < 5 * 60 { return }
+            if !force, let snapshot, snapshot.timetable != nil, Date().timeIntervalSince(snapshot.syncedAt) < 5 * 60 { return }
             await fetch(active)
         } catch {
             errorMessage = error.localizedDescription

@@ -22,6 +22,7 @@ struct Snapshot: Codable {
     var failedCourseCount: Int? = nil
     var startedAt: Date? = nil
     var quizPlacements: [String: String]? = nil
+    var timetable: [TimetableClass]? = nil
 
     func upcoming(at date: Date) -> [Assignment] {
         assignments
@@ -83,6 +84,7 @@ struct SiteResponse: Decodable {
         let id: String
         let title: String
         let type: String?
+        let shortDescription: String?
         let sitePages: [Page]?
     }
 

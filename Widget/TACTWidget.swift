@@ -6,8 +6,7 @@ struct AssignmentEntry: TimelineEntry {
     let snapshot: Snapshot?
     let status: SyncStatus
     var lastAttemptAt: Date? = nil
-    var showsTimetable = false
-    var timetable = Timetable()
+    var rooms: [String: String] = [:]
     var assignments: [Assignment] { snapshot?.upcoming(at: date) ?? [] }
 }
 
@@ -44,19 +43,18 @@ struct AssignmentProvider: TimelineProvider {
         let session = try? TACTStore.session()
         let snapshot = session.flatMap { TACTStore.snapshot(for: $0.id) }
         completion(AssignmentEntry(date: .now, snapshot: snapshot, status: session == nil ? .signedOut : .ready,
-                                   showsTimetable: TimetableStore.showsTimetable, timetable: TimetableStore.load()))
+                                   rooms: TimetableRooms.values))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<AssignmentEntry>) -> Void) {
         Task {
             let firstDayEnd = TACTStore.widgetFirstDayEnd
             var entry = await WidgetBackgroundSync.shared.entry(firstDayEnd: firstDayEnd)
-            entry.showsTimetable = TimetableStore.showsTimetable
-            entry.timetable = TimetableStore.load()
+            entry.rooms = TimetableRooms.values
 
             let lastAttempt = entry.lastAttemptAt ?? entry.snapshot?.syncedAt ?? entry.date
             let scheduled = WidgetSyncSchedule.nextAttempt(after: lastAttempt, at: entry.date, firstDayEnd: firstDayEnd)
-            let midnight = Timetable.nextDay(after: entry.date)
+            let midnight = AcademicDay.nextDay(after: entry.date)
             let nextSync = entry.status == .signedOut ? midnight : max(entry.date.addingTimeInterval(5 * 60), scheduled)
             var displayDates = Set(entry.assignments.flatMap {
                 [$0.due.addingTimeInterval(-urgentDeadlineInterval), $0.due.addingTimeInterval(-60), $0.due, $0.closes]
@@ -84,14 +82,8 @@ struct AssignmentWidgetView: View {
     var entry: AssignmentEntry
 
     var body: some View {
-        Group {
-            if family == .systemMedium && entry.showsTimetable {
-                TimetableWidget(timetable: entry.timetable, date: entry.date)
-            } else {
-                WidgetCard(entry: entry, compact: family == .systemSmall)
-            }
-        }
-        .containerBackground(WidgetPalette.background(colorScheme), for: .widget)
+        WidgetCard(entry: entry, compact: family == .systemSmall)
+            .containerBackground(WidgetPalette.background(colorScheme), for: .widget)
     }
 }
 
@@ -121,7 +113,7 @@ struct WidgetCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: compact ? 5 : 2) {
             if let first = entry.assignments.first {
                 if compact {
                     nextAssignment(first)
@@ -133,27 +125,34 @@ struct WidgetCard: View {
                     .font(.system(size: 14, weight: .medium))
                     .frame(maxHeight: .infinity, alignment: .center)
             }
-            if entry.snapshot != nil || !compact {
+            if !compact {
                 Spacer(minLength: 0)
-                VStack(alignment: .leading, spacing: compact ? 4 : 2) {
-                    Divider()
-                    HStack(spacing: 5) {
+                Divider()
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text("\(AcademicDay(on: entry.date).weekdayLabel)曜の時間割")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                            .accessibilityAddTraits(.isHeader)
+                        Spacer(minLength: 0)
                         if let snapshot = entry.snapshot {
-                            syncStatus(snapshot)
-                        } else {
-                            Spacer(minLength: 0)
-                        }
-                        if !compact {
-                            WidgetViewSwitch(showsTimetable: true)
+                            syncStatus(snapshot, trailing: true)
                         }
                     }
+                    TimetableWidget(timetable: entry.snapshot?.timetable, rooms: entry.rooms, date: entry.date)
                 }
                 .layoutPriority(1)
+            } else if let snapshot = entry.snapshot {
+                Spacer(minLength: 0)
+                Divider()
+                syncStatus(snapshot)
+                    .layoutPriority(1)
             }
         }
         .padding(.horizontal, compact ? 14 : 16)
-        .padding(.top, compact ? 14 : 10)
-        .padding(.bottom, 11)
+        .padding(.top, compact ? 14 : 8)
+        .padding(.bottom, compact ? 11 : 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
@@ -187,12 +186,14 @@ struct WidgetCard: View {
                     Divider()
                 }
                 HStack(alignment: .center, spacing: 7) {
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 0) {
                         Text(courseName(assignment))
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(.secondary)
+                            .frame(height: 11)
                         Text(title(assignment))
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(height: 12)
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
@@ -206,7 +207,6 @@ struct WidgetCard: View {
                         .multilineTextAlignment(.trailing)
                         .frame(width: 88, alignment: .trailing)
                 }
-                .padding(.vertical, 2)
                 .accessibilityElement(children: .combine)
             }
         }
@@ -243,7 +243,7 @@ struct WidgetCard: View {
         }
     }
 
-    private func syncStatus(_ snapshot: Snapshot) -> some View {
+    private func syncStatus(_ snapshot: Snapshot, trailing: Bool = false) -> some View {
         let label: String
         switch entry.status {
         case .reconnect: label = "要再接続"
@@ -268,8 +268,8 @@ struct WidgetCard: View {
             .monospacedDigit()
             .lineLimit(1)
             .minimumScaleFactor(0.85)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: trailing ? .trailing : .leading)
+            .multilineTextAlignment(trailing ? .trailing : .leading)
     }
 
     private func durationText(_ duration: TimeInterval) -> String {
@@ -301,7 +301,7 @@ struct TACTWidget: Widget {
             AssignmentWidgetView(entry: entry)
         }
         .configurationDisplayName("TACTの課題・小テスト")
-        .description("横長サイズでは、提出予定と今日の時間割を切り替えられます。")
+        .description("横長サイズは、締切が近い未提出項目と今日の時間割を表示します。")
         .supportedFamilies([.systemSmall, .systemMedium])
         .contentMarginsDisabled()
         .onBackgroundURLSessionEvents(matching: WidgetBackgroundSync.identifier) { _, completion in

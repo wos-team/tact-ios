@@ -331,7 +331,8 @@ enum TACTClient {
             assignments: assignments.filter { seen.insert($0.id).inserted },
             failedCourseCount: failedSites.count,
             startedAt: started,
-            quizPlacements: quizPlacements
+            quizPlacements: quizPlacements,
+            timetable: sites.compactMap(TimetableClass.init(site:))
         )
     }
 

@@ -1,92 +1,59 @@
-import AppIntents
 import SwiftUI
 
 struct TimetableWidget: View {
-    let timetable: Timetable
+    let timetable: [TimetableClass]?
+    let rooms: [String: String]
     let date: Date
 
-    private var weekday: TimetableWeekday { Timetable.weekday(on: date) }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text("\(weekday.label)曜日")
-                    .font(.system(size: 14, weight: .semibold))
-                    .accessibilityAddTraits(.isHeader)
-                Spacer()
-                WidgetViewSwitch(showsTimetable: false)
-            }
-
-            HStack(alignment: .top, spacing: 4) {
-                ForEach(TimetablePeriod.standard) { period in
-                    periodColumn(period)
-                }
-            }
-
-            if timetable.classes.isEmpty {
-                Text("アプリの「時間割」から登録")
+        let day = AcademicDay(on: date)
+        let today = (timetable ?? []).filter(day.includes)
+        let occupied = Set(today.flatMap(\.slots).filter { $0.weekday == day.weekday }.map(\.period))
+        let periods = occupied.contains(where: { $0 > 5 }) ? occupied.sorted() : Array(1...5)
+        VStack(alignment: .leading, spacing: 3) {
+            if timetable?.isEmpty != false {
+                Text(timetable == nil ? "TACTとの同期後に表示" : "曜日・時限を確認できる授業なし")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
+            } else if occupied.isEmpty {
+                Text("授業なし")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            } else {
+                HStack(alignment: .top, spacing: 4) {
+                    ForEach(periods, id: \.self) { period in
+                        let slot = TimetableSlot(weekday: day.weekday, period: period)
+                        periodView(period, lessons: today.filter { $0.slots.contains(slot) })
+                    }
+                }
             }
         }
-        .padding(.horizontal, 13)
-        .padding(.top, 10)
-        .padding(.bottom, 9)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func periodColumn(_ period: TimetablePeriod) -> some View {
-        let lesson = timetable.lesson(on: weekday, period: period)
-        return VStack(alignment: .center, spacing: 2) {
-            Text("\(period.id)限")
-                .font(.system(size: 11, weight: .semibold))
-            VStack(spacing: 0) {
-                Text(period.start)
-                Text(period.end)
-            }
-            .font(.system(size: 9).monospacedDigit())
-            .foregroundStyle(.secondary)
-
-            Divider().padding(.vertical, 1)
-
-            if let lesson {
-                Text(lesson.name)
-                    .font(.system(size: 10, weight: .semibold))
-                    .lineLimit(3)
+    private func periodView(_ period: Int, lessons: [TimetableClass]) -> some View {
+        VStack(spacing: 1) {
+            Text(lessons.count > 1 ? "\(period)限 +\(lessons.count - 1)" : "\(period)限")
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(.secondary)
+            if let first = lessons.first {
+                Text(first.name)
+                    .font(.system(size: 9, weight: .semibold))
+                    .lineLimit(2, reservesSpace: true)
                     .minimumScaleFactor(0.85)
                     .multilineTextAlignment(.center)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                Text(lesson.room)
-                    .font(.system(size: 9))
+                Text(rooms[first.id] ?? "—")
+                    .font(.system(size: 8))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             } else {
                 Text("—")
-                    .font(.system(size: 10))
+                    .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
-                    .frame(maxHeight: .infinity, alignment: .top)
                     .accessibilityLabel("授業なし")
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
         .accessibilityElement(children: .combine)
-    }
-}
-
-struct WidgetViewSwitch: View {
-    let showsTimetable: Bool
-
-    var body: some View {
-        Button(intent: SetWidgetTimetableIntent(showsTimetable: showsTimetable)) {
-            Label(showsTimetable ? "時間割" : "提出予定",
-                  systemImage: showsTimetable ? "calendar" : "list.bullet")
-                .font(.system(size: 10, weight: .semibold))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 3)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(showsTimetable ? "今日の時間割を表示" : "提出予定を表示")
     }
 }
