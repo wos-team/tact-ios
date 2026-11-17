@@ -22,9 +22,11 @@ struct AssignmentsView: View {
     @State private var needsReconnect = false
     @State private var syncing = false
     @State private var showsSignIn = false
+    @State private var showsWidgetSetup = false
     @State private var roomEditor: RoomEditorRequest?
     @State private var rooms = TimetableRooms.values
     @State private var importPhoto: PhotosPickerItem?
+    @AppStorage("finishedWidgetSetup") private var finishedWidgetSetup = false
     @AppStorage("finishedTimetableRoomSetup") private var finishedTimetableRoomSetup = false
     @State private var errorMessage: String?
     @State private var lastWidgetAttempt: WidgetSyncAttempt?
@@ -37,6 +39,10 @@ struct AssignmentsView: View {
         var slot: TimetableSlot? = nil
         var photo: PhotosPickerItem? = nil
         var allowsImport = true
+    }
+
+    private var requiresWidgetSetup: Bool {
+        connected && snapshot != nil && !finishedWidgetSetup && !showsSignIn && roomEditor == nil
     }
 
     var body: some View {
@@ -54,6 +60,17 @@ struct AssignmentsView: View {
             settingsTab
                 .tabItem { Label("設定", systemImage: "gearshape") }
                 .tag(Tab.settings)
+        }
+        .onChange(of: requiresWidgetSetup, initial: true) { _, required in
+            showsWidgetSetup = required
+        }
+        .fullScreenCover(isPresented: $showsWidgetSetup) {
+            WidgetSetupView {
+                if activeTab == .settings { activeTab = .assignments }
+                finishedWidgetSetup = true
+                showsWidgetSetup = false
+            }
+            .interactiveDismissDisabled()
         }
         .onChange(of: activeTab) { _, tab in
             if tab == .settings { lastWidgetAttempt = TACTStore.lastWidgetAttempt }
@@ -385,6 +402,105 @@ struct AssignmentsView: View {
                 }
             }
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct WidgetSetupView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var checkRequest = 0
+    @State private var checking = false
+    @State private var checkMessage: String?
+    let onFinish: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Label {
+                        Text("ホーム画面の空いている場所を長押し")
+                    } icon: {
+                        Text("1")
+                    }
+                    Label {
+                        Text("「編集」→「ウィジェットを追加」を選択")
+                    } icon: {
+                        Text("2")
+                    }
+                    Label {
+                        Text("「my tact」を検索し、好きなサイズを追加")
+                    } icon: {
+                        Text("3")
+                    }
+                } header: {
+                    Text("追加する手順")
+                }
+
+                Section {
+                    LabeledContent("小・中", value: "締切をひと目で確認")
+                    LabeledContent("大型・特大", value: "課題のAI要約も表示")
+                } header: {
+                    Text("サイズの選び方")
+                } footer: {
+                    Text("AI要約には iOS 26 以降と、有効な Apple Intelligence が必要です。")
+                }
+
+                Section {
+                    Button {
+                        checkRequest += 1
+                    } label: {
+                        if checking {
+                            ProgressView("追加を確認中")
+                        } else {
+                            Text("追加を確認")
+                        }
+                    }
+                    .disabled(checking)
+                } footer: {
+                    Text(checkMessage ?? "追加してアプリに戻ると、自動で確認します。")
+                }
+            }
+            .navigationTitle("ウィジェットを追加")
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { checkRequest += 1 }
+        }
+        .task(id: checkRequest) {
+            await checkInstallation(manual: checkRequest > 0)
+        }
+    }
+
+    @MainActor
+    private func checkInstallation(manual: Bool) async {
+        checking = true
+        checkMessage = nil
+        defer { if !Task.isCancelled { checking = false } }
+
+        do {
+            for delay in [0, 300, 700] {
+                if delay > 0 { try await Task.sleep(for: .milliseconds(delay)) }
+                let installed = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Bool, Error>) in
+                    WidgetCenter.shared.getCurrentConfigurations { result in
+                        continuation.resume(with: result.map { widgets in
+                            widgets.contains { $0.kind == "TACTAssignments" }
+                        })
+                    }
+                }
+                try Task.checkCancellation()
+                if installed {
+                    onFinish()
+                    return
+                }
+            }
+            if manual {
+                checkMessage = "ウィジェットがまだ見つかりません。追加したら、もう一度確認してください。"
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            if !Task.isCancelled {
+                checkMessage = "追加状況を確認できませんでした。「追加を確認」を押してもう一度お試しください。"
+            }
         }
     }
 }
