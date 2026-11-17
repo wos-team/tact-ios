@@ -8,6 +8,8 @@ struct AssignmentEntry: TimelineEntry {
     var assignments: [Assignment] { snapshot?.upcoming(at: date) ?? [] }
 }
 
+private let urgentDeadlineInterval: TimeInterval = 3 * 60 * 60
+
 enum SyncStatus {
     case signedOut
     case ready
@@ -47,7 +49,7 @@ struct AssignmentProvider: TimelineProvider {
             let nextSync = max(entry.date.addingTimeInterval(5 * 60),
                                lastAttempt.addingTimeInterval(TACTClient.refreshInterval))
             var displayDates = Set(entry.assignments.flatMap {
-                [$0.due.addingTimeInterval(-60), $0.due, $0.closes]
+                [$0.due.addingTimeInterval(-urgentDeadlineInterval), $0.due.addingTimeInterval(-60), $0.due, $0.closes]
             }.filter { entry.date < $0 && $0 < nextSync })
             if #unavailable(iOS 18.0, macOS 15.0), entry.snapshot != nil {
                 // Older iOS needs entries for text updates, independent of TACT requests.
@@ -92,15 +94,31 @@ struct AssignmentProvider: TimelineProvider {
 
 struct AssignmentWidgetView: View {
     @Environment(\.widgetFamily) private var family
+    @Environment(\.colorScheme) private var colorScheme
     var entry: AssignmentEntry
 
     var body: some View {
         WidgetCard(entry: entry, compact: family == .systemSmall)
-            .containerBackground(.fill.tertiary, for: .widget)
+            .containerBackground(WidgetPalette.background(colorScheme), for: .widget)
+    }
+}
+
+private enum WidgetPalette {
+    static func background(_ scheme: ColorScheme) -> Color {
+        scheme == .dark
+            ? Color(red: 0.131, green: 0.134, blue: 0.127)
+            : Color(red: 0.973, green: 0.969, blue: 0.950)
+    }
+
+    static func urgent(_ scheme: ColorScheme) -> Color {
+        scheme == .dark
+            ? Color(red: 0.99, green: 0.70, blue: 0.64)
+            : Color(red: 0.60, green: 0.24, blue: 0.18)
     }
 }
 
 struct WidgetCard: View {
+    @Environment(\.colorScheme) private var colorScheme
     let entry: AssignmentEntry
     let compact: Bool
 
@@ -125,28 +143,36 @@ struct WidgetCard: View {
             }
             if let snapshot = entry.snapshot {
                 Spacer(minLength: 0)
-                syncStatus(snapshot)
+                VStack(alignment: .leading, spacing: 4) {
+                    Divider()
+                    syncStatus(snapshot)
+                }
+                .layoutPriority(1)
             }
         }
-        .padding(.horizontal, compact ? 13 : 15)
-        .padding(.vertical, 12)
+        .padding(.horizontal, compact ? 14 : 16)
+        .padding(.top, compact ? 14 : 10)
+        .padding(.bottom, 11)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func nextAssignment(_ assignment: Assignment) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(courseName(assignment))
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(2)
-            Text(title(assignment))
-                .font(.system(size: 14))
-                .lineLimit(2)
-            Spacer(minLength: 3)
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(courseName(assignment))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                Text(title(assignment))
+                    .font(.system(size: 17, weight: .semibold))
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 5)
             deadline(assignment)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .monospacedDigit()
                 .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                .minimumScaleFactor(0.80)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .multilineTextAlignment(.leading)
         }
@@ -162,23 +188,24 @@ struct WidgetCard: View {
                 HStack(alignment: .center, spacing: 7) {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(courseName(assignment))
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
                         Text(title(assignment))
-                            .font(.system(size: 11))
+                            .font(.system(size: 13, weight: .semibold))
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     deadline(assignment)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 12, weight: .medium))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                         .multilineTextAlignment(.trailing)
-                        .frame(width: 89, alignment: .trailing)
+                        .frame(width: 88, alignment: .trailing)
                 }
-                .padding(.vertical, 3)
+                .padding(.vertical, 2)
                 .accessibilityElement(children: .combine)
             }
         }
@@ -187,16 +214,17 @@ struct WidgetCard: View {
     private func deadline(_ assignment: Assignment) -> Text {
         guard assignment.hasDeadline else { return Text("締切なし").foregroundColor(.secondary) }
         let remaining = assignment.due.timeIntervalSince(entry.date)
-        if remaining <= 0 { return Text("締切超過").foregroundColor(.red) }
-        if remaining < 60 { return Text("あと1分未満") }
+        let color = remaining <= urgentDeadlineInterval ? WidgetPalette.urgent(colorScheme) : Color.primary
+        if remaining <= 0 { return Text("締切超過").foregroundColor(color) }
+        if remaining < 60 { return Text("あと1分未満").foregroundColor(color) }
 
         if #available(iOS 18.0, macOS 15.0, *) {
             let format = SystemFormatStyle.DateOffset(
                 to: assignment.due, allowedFields: [.day, .hour, .minute], maxFieldCount: 2, sign: .never
             ).calendar(displayCalendar)
-            return Text("あと\(TimeDataSource<Date>.currentDate, format: format)")
+            return Text("あと\(TimeDataSource<Date>.currentDate, format: format)").foregroundColor(color)
         }
-        return Text("あと\(durationText(remaining))")
+        return Text("あと\(durationText(remaining))").foregroundColor(color)
     }
 
     private var emptyMessage: String {
