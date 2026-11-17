@@ -19,7 +19,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: jp.matsuokakoki.tact-ios
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: Configuration/TACT.plist
-        INFOPLIST_KEY_CFBundleDisplayName: TACT
+        INFOPLIST_KEY_CFBundleDisplayName: my tact
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         CODE_SIGN_ENTITLEMENTS: Configuration/TACT.entitlements
     dependencies:
