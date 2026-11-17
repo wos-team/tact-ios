@@ -48,6 +48,12 @@ struct AssignmentsView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    if let failed = snapshot?.failedCourseCount, failed > 0 {
+                        Text("\(failed)件の講義を更新できませんでした。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
                     if let errorMessage {
                         Text(errorMessage).foregroundStyle(.secondary)
                     }
@@ -57,7 +63,10 @@ struct AssignmentsView: View {
                     Section("未提出の課題") {
                         let assignments = snapshot.upcoming(at: .now)
                         if assignments.isEmpty {
-                            Text("表示できる未提出課題はありません。").foregroundStyle(.secondary)
+                            Text((snapshot.failedCourseCount ?? 0) > 0
+                                 ? "取得できた講義に表示できる未提出課題はありません。"
+                                 : "表示できる未提出課題はありません。")
+                                .foregroundStyle(.secondary)
                         }
                         ForEach(assignments) { assignment in
                             VStack(alignment: .leading, spacing: 5) {

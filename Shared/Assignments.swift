@@ -7,12 +7,14 @@ struct Assignment: Identifiable, Codable {
     let due: Date
     let closes: Date
     let submitted: Bool
+    var courseID: String? = nil
 }
 
 struct Snapshot: Codable {
     let sessionID: UUID
     let syncedAt: Date
     let assignments: [Assignment]
+    var failedCourseCount: Int? = nil
 
     func upcoming(at date: Date) -> [Assignment] {
         assignments
@@ -63,7 +65,8 @@ struct TACTAssignment: Decodable {
             course: courses[context] ?? context,
             due: due,
             closes: closeTime?.date ?? due,
-            submitted: submissions?.contains(where: \.isSubmitted) ?? false
+            submitted: submissions?.contains(where: \.isSubmitted) ?? false,
+            courseID: context
         )
     }
 }
@@ -72,6 +75,7 @@ struct SiteResponse: Decodable {
     struct Site: Decodable {
         let id: String
         let title: String
+        let type: String?
     }
 
     let site_collection: [Site]

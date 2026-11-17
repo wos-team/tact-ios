@@ -127,7 +127,12 @@ struct AssignmentWidgetView: View {
     private var emptyMessage: String {
         switch entry.status {
         case .signedOut: "アプリを開いてTACTに接続"
-        case .ready: entry.snapshot == nil ? "課題を取得中" : "未提出課題はありません"
+        case .ready:
+            if let snapshot = entry.snapshot {
+                (snapshot.failedCourseCount ?? 0) > 0 ? "一部の講義を取得できません" : "未提出課題はありません"
+            } else {
+                "課題を取得中"
+            }
         case .reconnect: "アプリを開いて再接続"
         case .delayed: "課題を更新できません"
         }
@@ -135,7 +140,9 @@ struct AssignmentWidgetView: View {
 
     private func syncLabel(_ snapshot: Snapshot) -> String {
         let time = snapshot.syncedAt.formatted(.dateTime.month().day().hour().minute())
-        return entry.status == .reconnect ? "要再接続・\(time)" : "同期 \(time)"
+        if entry.status == .reconnect { return "要再接続・\(time)" }
+        if (snapshot.failedCourseCount ?? 0) > 0 { return "一部同期 \(time)" }
+        return "同期 \(time)"
     }
 }
 
