@@ -44,10 +44,11 @@ struct AssignmentProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<AssignmentEntry>) -> Void) {
         Task {
-            let entry = await loadEntry()
+            let firstDayEnd = TACTStore.widgetFirstDayEnd
+            let entry = await loadEntry(firstDayEnd: firstDayEnd)
             let lastAttempt = entry.status == .ready ? entry.snapshot?.syncedAt ?? entry.date : entry.date
-            let nextSync = max(entry.date.addingTimeInterval(5 * 60),
-                               lastAttempt.addingTimeInterval(TACTClient.refreshInterval))
+            let scheduled = WidgetSyncSchedule.nextAttempt(after: lastAttempt, at: entry.date, firstDayEnd: firstDayEnd)
+            let nextSync = max(entry.date.addingTimeInterval(5 * 60), scheduled)
             var displayDates = Set(entry.assignments.flatMap {
                 [$0.due.addingTimeInterval(-urgentDeadlineInterval), $0.due.addingTimeInterval(-60), $0.due, $0.closes]
             }.filter { entry.date < $0 && $0 < nextSync })
@@ -64,14 +65,16 @@ struct AssignmentProvider: TimelineProvider {
         }
     }
 
-    private func loadEntry() async -> AssignmentEntry {
+    private func loadEntry(firstDayEnd: Date?) async -> AssignmentEntry {
         do {
             guard let session = try TACTStore.session() else {
                 return AssignmentEntry(date: .now, snapshot: nil, status: .signedOut)
             }
             let cached = TACTStore.snapshot(for: session.id)
-            if let cached, Date().timeIntervalSince(cached.syncedAt) < TACTClient.refreshInterval {
-                return AssignmentEntry(date: .now, snapshot: cached, status: .ready)
+            let now = Date()
+            if let cached,
+               now < WidgetSyncSchedule.nextAttempt(after: cached.syncedAt, at: now, firstDayEnd: firstDayEnd) {
+                return AssignmentEntry(date: now, snapshot: cached, status: .ready)
             }
 
             do {

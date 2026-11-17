@@ -49,6 +49,20 @@ struct SessionCookie: Codable {
 
 enum TACTStore {
     static let group = "group.jp.matsuokakoki.tact-ios"
+    private static let firstDayEndKey = "widgetFirstLaunchDayEnd"
+
+    static var widgetFirstDayEnd: Date? {
+        UserDefaults(suiteName: group)?.object(forKey: firstDayEndKey) as? Date
+    }
+
+    static func recordFirstLaunch(at date: Date = .now, calendar: Calendar = .current) -> Bool {
+        guard let defaults = UserDefaults(suiteName: group),
+              defaults.object(forKey: firstDayEndKey) == nil,
+              let day = calendar.dateInterval(of: .day, for: date) else { return false }
+        defaults.set(day.end, forKey: firstDayEndKey)
+        return true
+    }
+
     private static let baseKey: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrAccessGroup as String: group,
@@ -114,6 +128,16 @@ enum TACTStore {
     }
 }
 
+enum WidgetSyncSchedule {
+    static func nextAttempt(after lastAttempt: Date, at now: Date, firstDayEnd: Date?) -> Date {
+        let firstDayAttempt = lastAttempt.addingTimeInterval(10 * 60)
+        if let firstDayEnd, max(now, firstDayAttempt) < firstDayEnd {
+            return firstDayAttempt
+        }
+        return lastAttempt.addingTimeInterval(60 * 60)
+    }
+}
+
 final class TACTRedirects: NSObject, URLSessionTaskDelegate {
     let cookies: [SessionCookie]
 
@@ -145,7 +169,6 @@ enum TACTClient {
     static let host = "tact.ac.thers.ac.jp"
     static let home = URL(string: "https://\(host)/portal")!
     static let login = home.appendingPathComponent("login")
-    static let refreshInterval: TimeInterval = 60 * 60
 
     private struct SessionResponse: Decodable {
         let userEid: String?
