@@ -80,16 +80,29 @@ struct AssignmentProvider: TimelineProvider {
             do {
                 let snapshot = try await TACTClient.fetch(using: session)
                 guard try TACTStore.session()?.id == session.id else {
+                    TACTStore.recordWidgetAttempt("中断（セッション変更）")
                     return AssignmentEntry(date: .now, snapshot: nil, status: .delayed)
                 }
                 try TACTStore.save(snapshot)
+                let failures = snapshot.failedCourseCount ?? 0
+                TACTStore.recordWidgetAttempt(failures > 0 ? "一部同期（未取得 \(failures)講義）" : "成功")
                 return AssignmentEntry(date: .now, snapshot: TACTStore.snapshot(for: session.id), status: .ready)
             } catch TACTError.signInRequired {
+                TACTStore.recordWidgetAttempt("要再接続")
                 return AssignmentEntry(date: .now, snapshot: cached, status: .reconnect)
             } catch {
+                let result: String
+                switch error {
+                case TACTError.timedOut(let stage): result = "\(stage)がタイムアウト"
+                case TACTError.requestFailed(let stage): result = "\(stage)に失敗"
+                case is CancellationError: result = "処理が中断されました"
+                default: result = "同期結果の保存に失敗"
+                }
+                TACTStore.recordWidgetAttempt(result)
                 return AssignmentEntry(date: .now, snapshot: cached, status: .delayed)
             }
         } catch {
+            TACTStore.recordWidgetAttempt("ログイン情報の読み込みに失敗")
             return AssignmentEntry(date: .now, snapshot: nil, status: .delayed)
         }
     }
@@ -248,7 +261,7 @@ struct WidgetCard: View {
         let label: String
         switch entry.status {
         case .reconnect: label = "要再接続"
-        case .delayed: label = "前回同期"
+        case .delayed: label = "同期失敗・前回"
         case .ready, .signedOut: label = (snapshot.failedCourseCount ?? 0) > 0 ? "一部同期" : "同期"
         }
         let elapsed: Text

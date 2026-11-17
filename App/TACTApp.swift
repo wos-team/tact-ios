@@ -23,6 +23,7 @@ struct AssignmentsView: View {
     @State private var syncing = false
     @State private var showsSignIn = false
     @State private var errorMessage: String?
+    @State private var lastWidgetAttempt: WidgetSyncAttempt?
 
     var body: some View {
         NavigationStack {
@@ -52,6 +53,19 @@ struct AssignmentsView: View {
                         Text("最終同期 \(snapshot.syncedAt.formatted(.dateTime.month().day().hour().minute()))")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                    }
+
+                    if connected || lastWidgetAttempt != nil {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("ウィジェットの自動同期")
+                            if let attempt = lastWidgetAttempt {
+                                Text("\(attempt.finishedAt.formatted(.dateTime.month().day().hour().minute()))  \(attempt.result)")
+                            } else {
+                                Text("実行記録なし")
+                            }
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                     }
 
                     if let failed = snapshot?.failedCourseCount, failed > 0 {
@@ -96,7 +110,10 @@ struct AssignmentsView: View {
             .refreshable { await sync(force: true) }
         }
         .task(id: scenePhase) {
-            if scenePhase == .active { await sync(force: false) }
+            if scenePhase == .active {
+                lastWidgetAttempt = TACTStore.lastWidgetAttempt
+                await sync(force: false)
+            }
         }
         .sheet(isPresented: $showsSignIn) {
             NavigationStack {

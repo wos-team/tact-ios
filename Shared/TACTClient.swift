@@ -47,9 +47,26 @@ struct SessionCookie: Codable {
     }
 }
 
+struct WidgetSyncAttempt: Codable {
+    let finishedAt: Date
+    let result: String
+}
+
 enum TACTStore {
     static let group = "group.jp.matsuokakoki.tact-ios"
     private static let firstDayEndKey = "widgetFirstLaunchDayEnd"
+    private static let widgetAttemptKey = "lastWidgetSyncAttempt"
+
+    static var lastWidgetAttempt: WidgetSyncAttempt? {
+        guard let data = UserDefaults(suiteName: group)?.data(forKey: widgetAttemptKey) else { return nil }
+        return try? JSONDecoder().decode(WidgetSyncAttempt.self, from: data)
+    }
+
+    static func recordWidgetAttempt(_ result: String) {
+        let attempt = WidgetSyncAttempt(finishedAt: .now, result: result)
+        guard let data = try? JSONEncoder().encode(attempt) else { return }
+        UserDefaults(suiteName: group)?.set(data, forKey: widgetAttemptKey)
+    }
 
     static var widgetFirstDayEnd: Date? {
         UserDefaults(suiteName: group)?.object(forKey: firstDayEndKey) as? Date
@@ -178,8 +195,8 @@ enum TACTClient {
         let started = Date()
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpShouldSetCookies = false
-        configuration.timeoutIntervalForRequest = foreground ? 25 : 8
-        configuration.timeoutIntervalForResource = foreground ? 35 : 12
+        configuration.timeoutIntervalForRequest = foreground ? 25 : 15
+        configuration.timeoutIntervalForResource = foreground ? 35 : 20
         let network = URLSession(configuration: configuration, delegate: TACTRedirects(cookies: session.cookies), delegateQueue: nil)
         defer { network.finishTasksAndInvalidate() }
 
