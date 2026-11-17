@@ -20,6 +20,7 @@ struct Snapshot: Codable {
     let syncedAt: Date
     let assignments: [Assignment]
     var failedCourseCount: Int? = nil
+    var startedAt: Date? = nil
 
     func upcoming(at date: Date) -> [Assignment] {
         assignments

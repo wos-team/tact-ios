@@ -5,6 +5,7 @@ struct AssignmentEntry: TimelineEntry {
     let date: Date
     let snapshot: Snapshot?
     let status: SyncStatus
+    var lastAttemptAt: Date? = nil
     var assignments: [Assignment] { snapshot?.upcoming(at: date) ?? [] }
 }
 
@@ -13,6 +14,7 @@ private let urgentDeadlineInterval: TimeInterval = 3 * 60 * 60
 enum SyncStatus {
     case signedOut
     case ready
+    case syncing
     case reconnect
     case delayed
 }
@@ -45,8 +47,8 @@ struct AssignmentProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<AssignmentEntry>) -> Void) {
         Task {
             let firstDayEnd = TACTStore.widgetFirstDayEnd
-            let entry = await loadEntry(firstDayEnd: firstDayEnd)
-            let lastAttempt = entry.status == .ready ? entry.snapshot?.syncedAt ?? entry.date : entry.date
+            let entry = await WidgetBackgroundSync.shared.entry(firstDayEnd: firstDayEnd)
+            let lastAttempt = entry.lastAttemptAt ?? entry.snapshot?.syncedAt ?? entry.date
             let scheduled = WidgetSyncSchedule.nextAttempt(after: lastAttempt, at: entry.date, firstDayEnd: firstDayEnd)
             let nextSync = max(entry.date.addingTimeInterval(5 * 60), scheduled)
             var displayDates = Set(entry.assignments.flatMap {
@@ -59,51 +61,9 @@ struct AssignmentProvider: TimelineProvider {
                 displayDates.formUnion(offsets.map { entry.date.addingTimeInterval($0) })
             }
             let entries = [entry] + displayDates.sorted().map {
-                AssignmentEntry(date: $0, snapshot: entry.snapshot, status: entry.status)
+                AssignmentEntry(date: $0, snapshot: entry.snapshot, status: entry.status, lastAttemptAt: entry.lastAttemptAt)
             }
             completion(Timeline(entries: entries, policy: entry.status == .signedOut ? .never : .after(nextSync)))
-        }
-    }
-
-    private func loadEntry(firstDayEnd: Date?) async -> AssignmentEntry {
-        do {
-            guard let session = try TACTStore.session() else {
-                return AssignmentEntry(date: .now, snapshot: nil, status: .signedOut)
-            }
-            let cached = TACTStore.snapshot(for: session.id)
-            let now = Date()
-            if let cached,
-               now < WidgetSyncSchedule.nextAttempt(after: cached.syncedAt, at: now, firstDayEnd: firstDayEnd) {
-                return AssignmentEntry(date: now, snapshot: cached, status: .ready)
-            }
-
-            do {
-                let snapshot = try await TACTClient.fetch(using: session)
-                guard try TACTStore.session()?.id == session.id else {
-                    TACTStore.recordWidgetAttempt("中断（セッション変更）")
-                    return AssignmentEntry(date: .now, snapshot: nil, status: .delayed)
-                }
-                try TACTStore.save(snapshot)
-                let failures = snapshot.failedCourseCount ?? 0
-                TACTStore.recordWidgetAttempt(failures > 0 ? "一部同期（未取得 \(failures)講義）" : "成功")
-                return AssignmentEntry(date: .now, snapshot: TACTStore.snapshot(for: session.id), status: .ready)
-            } catch TACTError.signInRequired {
-                TACTStore.recordWidgetAttempt("要再接続")
-                return AssignmentEntry(date: .now, snapshot: cached, status: .reconnect)
-            } catch {
-                let result: String
-                switch error {
-                case TACTError.timedOut(let stage): result = "\(stage)がタイムアウト"
-                case TACTError.requestFailed(let stage): result = "\(stage)に失敗"
-                case is CancellationError: result = "処理が中断されました"
-                default: result = "同期結果の保存に失敗"
-                }
-                TACTStore.recordWidgetAttempt(result)
-                return AssignmentEntry(date: .now, snapshot: cached, status: .delayed)
-            }
-        } catch {
-            TACTStore.recordWidgetAttempt("ログイン情報の読み込みに失敗")
-            return AssignmentEntry(date: .now, snapshot: nil, status: .delayed)
         }
     }
 }
@@ -248,6 +208,7 @@ struct WidgetCard: View {
         case .signedOut: "アプリでTACTに接続"
         case .reconnect: "アプリでTACTに再接続"
         case .delayed: "更新できませんでした"
+        case .syncing: "課題・小テストを同期中"
         case .ready:
             if let snapshot = entry.snapshot {
                 (snapshot.failedCourseCount ?? 0) > 0 ? "一部の講義を取得できません" : "未提出の課題・小テストはありません"
@@ -262,6 +223,7 @@ struct WidgetCard: View {
         switch entry.status {
         case .reconnect: label = "要再接続"
         case .delayed: label = "同期失敗・前回"
+        case .syncing: label = "同期中・前回"
         case .ready, .signedOut: label = (snapshot.failedCourseCount ?? 0) > 0 ? "一部同期" : "同期"
         }
         let elapsed: Text
@@ -317,5 +279,8 @@ struct TACTWidget: Widget {
         .description("締切が近い未提出の課題・小テストを表示します。")
         .supportedFamilies([.systemSmall, .systemMedium])
         .contentMarginsDisabled()
+        .onBackgroundURLSessionEvents(matching: WidgetBackgroundSync.identifier) { _, completion in
+            WidgetBackgroundSync.shared.receiveEvents(completion: completion)
+        }
     }
 }

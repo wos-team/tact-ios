@@ -175,7 +175,7 @@ struct AssignmentsView: View {
         defer { syncing = false }
 
         do {
-            let updated = try await TACTClient.fetch(using: session, foreground: true)
+            let updated = try await TACTClient.fetch(using: session)
             try Task.checkCancellation()
             try TACTStore.save(updated)
             if newSession {
