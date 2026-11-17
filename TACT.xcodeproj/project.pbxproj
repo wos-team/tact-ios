@@ -18,6 +18,7 @@
 		7F6CB485E8BCC35195D46F47 /* WeeklyTimetableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F45AE1C78D8F98C62B9FDE3 /* WeeklyTimetableView.swift */; };
 		83073E9194E82E055275C3D8 /* Assignments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C44F0637A921AC8EB8CE03F /* Assignments.swift */; };
 		8DE04D44C9EBADAE62E72FA2 /* TACTWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD088B27211C0FAA716DF176 /* TACTWidget.swift */; };
+		953C89842A47DA754937CFDD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 76B984AE6500E24592A19C67 /* Assets.xcassets */; };
 		A731B2AA9FDD256AFC99E298 /* TACTWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 53E64664148684C1EADFCCD0 /* TACTWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C076384B3566BC2FDCEC92D6 /* TimetableWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98CEE9E04C4FDF7A4F6BFAA4 /* TimetableWidget.swift */; };
 		C6569470C5570BED6193ECF8 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EA8DF8A47A39B1A4612B8E0 /* SignInView.swift */; };
@@ -63,6 +64,7 @@
 		56685D8B1135D0D538C59D4E /* AssignmentDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignmentDetailView.swift; sourceTree = "<group>"; };
 		5FE47B21C21C2C7A5F6085C8 /* WidgetBackgroundSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBackgroundSync.swift; sourceTree = "<group>"; };
 		6CD4CA4A906331CCA4BCD50D /* AssignmentSummaryWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignmentSummaryWorker.swift; sourceTree = "<group>"; };
+		76B984AE6500E24592A19C67 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		833A545E2DB52B784E77117B /* Timetable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timetable.swift; sourceTree = "<group>"; };
 		842878AEFEB2F50ED47649D0 /* TimetableEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableEditor.swift; sourceTree = "<group>"; };
 		98CEE9E04C4FDF7A4F6BFAA4 /* TimetableWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableWidget.swift; sourceTree = "<group>"; };
@@ -107,6 +109,7 @@
 		BBCBBB7B7652ECB8CB854A61 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				76B984AE6500E24592A19C67 /* Assets.xcassets */,
 				EB0C1E21F3416C83BBB16DE9 /* AssignmentContent.swift */,
 				56685D8B1135D0D538C59D4E /* AssignmentDetailView.swift */,
 				6CD4CA4A906331CCA4BCD50D /* AssignmentSummaryWorker.swift */,
@@ -137,6 +140,7 @@
 			buildConfigurationList = 9181DB8BC01A30D949E5DE7A /* Build configuration list for PBXNativeTarget "TACT" */;
 			buildPhases = (
 				9F01A49CEFB627F2051B3E26 /* Sources */,
+				8A400A31441342B2F1759A39 /* Resources */,
 				B05BA8D65D4447A0BFD3E711 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -198,6 +202,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8A400A31441342B2F1759A39 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				953C89842A47DA754937CFDD /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		9F01A49CEFB627F2051B3E26 /* Sources */ = {
