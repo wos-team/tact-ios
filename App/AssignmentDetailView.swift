@@ -11,17 +11,19 @@ struct AssignmentDetailView: View {
     var body: some View {
         List {
             Section {
-                Text(assignment.course)
+                Text(assignment.displayCourse)
                     .foregroundStyle(.secondary)
                 if assignment.hasDeadline {
                     LabeledContent("締切") {
-                        Text(assignment.due, format: .dateTime.month().day().weekday().hour().minute())
+                        Text(assignment.due, format: .dateTime.month().day().weekday().hour().minute()
+                            .locale(Locale(identifier: "ja_JP")))
                     }
                 }
             }
             Section {
                 if let summary = record?.summary {
                     Text(summary)
+                        .lineSpacing(4)
                         .textSelection(.enabled)
                 } else if worker.processing == assignment.id {
                     ProgressView("課題本文と添付資料を処理しています")

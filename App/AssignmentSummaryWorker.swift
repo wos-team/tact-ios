@@ -57,7 +57,7 @@ final class AssignmentSummaryWorker: ObservableObject {
         guard foreground, Self.modelAvailable, automaticTask == nil else { return }
         needsForegroundRestart = false
         automaticTask = Task {
-            _ = await processUpcoming(allowance: 3)
+            _ = await processUpcoming()
             let wasCancelled = Task.isCancelled
             automaticTask = nil
             if wasCancelled && needsForegroundRestart { startAutomaticWork() }
@@ -67,7 +67,7 @@ final class AssignmentSummaryWorker: ObservableObject {
     func runInBackground(_ task: BGProcessingTask) {
         schedule()
         let work = Task { @MainActor in
-            let finished = await processUpcoming(allowance: .max)
+            let finished = await processUpcoming()
             task.setTaskCompleted(success: finished && !Task.isCancelled)
         }
         task.expirationHandler = { work.cancel() }
@@ -118,9 +118,8 @@ final class AssignmentSummaryWorker: ObservableObject {
         return Context(session: session, snapshot: snapshot, account: account)
     }
 
-    private func processUpcoming(allowance: Int) async -> Bool {
+    private func processUpcoming() async -> Bool {
         guard Self.modelAvailable, let context = activeContext() else { return true }
-        var remaining = allowance
         for assignment in context.snapshot.upcoming(at: .now) where assignment.isQuiz != true {
             if Task.isCancelled { return false }
             if processing != nil || modelRetryAfter > .now || activeContext()?.session.id != context.session.id { break }
@@ -128,8 +127,6 @@ final class AssignmentSummaryWorker: ObservableObject {
             if let preview = AssignmentSummaryStore.preview(for: assignment, account: context.account),
                !preview.needsWork { continue }
             _ = await process(assignment, context: context)
-            remaining -= 1
-            if remaining == 0 { break }
         }
         return true
     }

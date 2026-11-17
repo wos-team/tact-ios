@@ -124,26 +124,31 @@ struct AssignmentsView: View {
                 }
 
                 if let snapshot {
-                    Section("未提出の課題・小テスト") {
-                        let assignments = snapshot.upcoming(at: .now)
-                        let summaryIDs = Set(assignments.lazy.filter { $0.isQuiz != true }.prefix(3).map(\.id))
-                        if assignments.isEmpty {
-                            Text((snapshot.failedCourseCount ?? 0) > 0
-                                 ? "取得できた講義に表示できる未提出の課題・小テストはありません。"
-                                 : "表示できる未提出の課題・小テストはありません。")
-                                .foregroundStyle(.secondary)
-                        }
-                        ForEach(assignments) { assignment in
-                            if assignment.isQuiz != true, let account = snapshot.summaryAccount {
-                                NavigationLink(value: assignment.id) {
-                                    assignmentRow(assignment, summaryAccount: summaryIDs.contains(assignment.id) ? account : nil)
+                    let now = Date()
+                    let assignments = snapshot.upcoming(at: now)
+                    if assignments.isEmpty {
+                        ContentUnavailableView(
+                            (snapshot.failedCourseCount ?? 0) > 0 ? "課題を取得できませんでした" : "未提出の項目はありません",
+                            systemImage: "checkmark.circle"
+                        )
+                    } else {
+                        let groups = Dictionary(grouping: assignments) { DeadlineGroup(assignment: $0, now: now) }
+                        ForEach(DeadlineGroup.allCases, id: \.self) { group in
+                            if let items = groups[group] {
+                                Section(group.rawValue) {
+                                    ForEach(items) { assignment in
+                                        if assignment.isQuiz != true, let account = snapshot.summaryAccount {
+                                            NavigationLink(value: assignment.id) {
+                                                assignmentRow(assignment, summaryAccount: account)
+                                            }
+                                        } else {
+                                            assignmentRow(assignment)
+                                        }
+                                    }
                                 }
-                            } else {
-                                assignmentRow(assignment)
                             }
                         }
                     }
-
                 } else if !connected && !hasPendingSession && !syncing {
                     ContentUnavailableView {
                         Label("課題を表示するには", systemImage: "checklist")
@@ -175,95 +180,126 @@ struct AssignmentsView: View {
     private var settingsTab: some View {
         NavigationStack {
             List {
-                Section("TACTとの同期") {
-                    if connected || hasPendingSession {
-                        Button {
-                            Task { await sync(force: true) }
-                        } label: {
-                            if syncing {
-                                ProgressView("TACTから課題・小テストを取得中")
-                            } else {
-                                Label("今すぐ更新", systemImage: "arrow.clockwise")
-                            }
-                        }
-                        .disabled(syncing)
-                    }
-
+                Section("TACTアカウント") {
                     if (!connected && !hasPendingSession) || needsReconnect {
                         Button(connected ? "TACTに再接続" : "TACTに接続") {
                             showsSignIn = true
                         }
                         .disabled(syncing)
+                    } else {
+                        LabeledContent("接続状態", value: connected ? "接続済み" : "接続を確認中")
                     }
-
-                    if let snapshot {
-                        Text("最終同期 \(snapshot.syncedAt.formatted(.dateTime.month().day().hour().minute()))")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if connected || lastWidgetAttempt != nil {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("ウィジェットの自動同期")
-                            if let attempt = lastWidgetAttempt {
-                                Text("\(attempt.finishedAt.formatted(.dateTime.month().day().hour().minute()))  \(attempt.result)")
-                            } else {
-                                Text("実行記録なし")
-                            }
-                        }
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    }
-
-                    if let failed = snapshot?.failedCourseCount, failed > 0 {
-                        Text("\(failed)件の講義を更新できませんでした。")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if let errorMessage {
-                        Text(errorMessage).foregroundStyle(.secondary)
+                    Link(destination: TACTClient.home) {
+                        Label("TACTをブラウザで開く", systemImage: "safari")
                     }
                 }
 
-                Link("TACTをブラウザで開く", destination: TACTClient.home)
+                if connected || hasPendingSession || lastWidgetAttempt != nil || errorMessage != nil {
+                    Section("同期") {
+                        if connected || hasPendingSession {
+                            Button {
+                                Task { await sync(force: true) }
+                            } label: {
+                                if syncing {
+                                    ProgressView("課題・小テストを取得中")
+                                } else {
+                                    Label("今すぐ更新", systemImage: "arrow.clockwise")
+                                }
+                            }
+                            .disabled(syncing)
+                        }
+                        if let snapshot {
+                            LabeledContent("最終同期") {
+                                Text(snapshot.syncedAt, format: syncDateFormat)
+                            }
+                        }
+                        if let failed = snapshot?.failedCourseCount, failed > 0 {
+                            Text("\(failed)件の講義を更新できませんでした。")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let errorMessage {
+                            Text(errorMessage).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                    Section("ウィジェット") {
+                        LabeledContent("自動同期", value: lastWidgetAttempt?.result ?? "実行記録なし")
+                        if let attempt = lastWidgetAttempt {
+                            LabeledContent("最終実行") {
+                                Text(attempt.finishedAt, format: syncDateFormat)
+                            }
+                        }
+                    }
+                }
             }
             .navigationTitle("設定")
         }
     }
 
+    private var syncDateFormat: Date.FormatStyle {
+        .dateTime.month().day().hour().minute().locale(Locale(identifier: "ja_JP"))
+    }
+
+    private enum DeadlineGroup: String, CaseIterable {
+        case overdue = "締切超過"
+        case today = "今日"
+        case tomorrow = "明日"
+        case upcoming = "今後"
+        case undated = "締切なし"
+
+        init(assignment: Assignment, now: Date) {
+            let calendar = Calendar.current
+            if !assignment.hasDeadline { self = .undated }
+            else if assignment.due <= now { self = .overdue }
+            else if calendar.isDate(assignment.due, inSameDayAs: now) { self = .today }
+            else if calendar.date(byAdding: .day, value: 1, to: now).map({
+                calendar.isDate(assignment.due, inSameDayAs: $0)
+            }) == true { self = .tomorrow }
+            else { self = .upcoming }
+        }
+    }
+
     private func assignmentRow(_ assignment: Assignment, summaryAccount: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(assignment.title).font(.headline)
-            Text(assignment.courseLabel)
+            Text(assignment.isQuiz == true ? "小テスト · \(assignment.displayCourse)" : assignment.displayCourse)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text(assignment.title)
+                .font(.headline)
+                .foregroundStyle(.primary)
             if assignment.hasDeadline {
-                Text(assignment.due, format: .dateTime.month().day().weekday().hour().minute())
-                    .foregroundStyle(assignment.due < .now ? Color.orange : Color.secondary)
-            } else {
-                Text("締切なし").foregroundStyle(.secondary)
+                Text(assignment.due, format: .dateTime.month().day().weekday().hour().minute()
+                    .locale(Locale(identifier: "ja_JP")))
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(assignment.due <= .now ? Color.orange : Color.secondary)
             }
 
             if let summaryAccount {
                 let preview = AssignmentSummaryStore.preview(for: assignment, account: summaryAccount)
                 if let summary = preview?.text, !summary.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(preview?.includesAllPDFs == false ? "AI要約 · 一部PDF未反映" : "AI要約")
+                        Text(preview?.includesAllPDFs == false ? "要約（一部のPDFを除く）" : "要約")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                         Text(summary)
                             .font(.subheadline)
                             .foregroundStyle(.primary)
+                            .lineSpacing(3)
+                    }
+                    .padding(.leading, 10)
+                    .overlay(alignment: .leading) {
+                        Rectangle().fill(.quaternary).frame(width: 2)
                     }
                     .padding(.top, 6)
                 } else if summaryWorker.processing == assignment.id {
-                    Label("要約を作成中", systemImage: "sparkles")
+                    Text("要約を作成中")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .padding(.top, 6)
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
     }
 
     @MainActor

@@ -12,7 +12,11 @@ struct Assignment: Identifiable, Codable {
     var isQuiz: Bool? = nil
     var contentRevision: String? = nil
 
-    var courseLabel: String { isQuiz == true ? "小テスト · \(course)" : course }
+    var displayCourse: String {
+        let suffix = #/\s*(?:[（(\[［]\s*[0-9０-９]{4}年度?[^）)\]］]*[）)\]］]|[（(]\s*旧\s*[:：][^）)]*[）)])+$/#
+        guard let match = course.firstMatch(of: suffix), match.range.lowerBound != course.startIndex else { return course }
+        return String(course[..<match.range.lowerBound])
+    }
     var hasDeadline: Bool { due != .distantFuture }
 
     var detailURL: URL? {

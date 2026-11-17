@@ -45,46 +45,74 @@ struct AssignmentProvider: TimelineProvider {
             completion(placeholder(in: context))
             return
         }
-        let session = try? TACTStore.session()
-        let snapshot = session.flatMap { TACTStore.snapshot(for: $0.id) }
-        var entry = AssignmentEntry(date: .now, snapshot: snapshot, status: session == nil ? .signedOut : .ready,
-                                    rooms: TimetableRooms.values)
+        var entry = cachedEntry()
         loadSummaries(into: &entry, for: context.family)
         completion(entry)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<AssignmentEntry>) -> Void) {
-        Task {
-            var entry = await WidgetBackgroundSync.shared.entry()
-            entry.rooms = TimetableRooms.values
-            loadSummaries(into: &entry, for: context.family)
-
-            let lastAttempt = entry.lastAttemptAt ?? entry.snapshot?.syncedAt ?? entry.date
-            let scheduled = WidgetSyncSchedule.nextAttempt(after: lastAttempt)
-            let midnight = AcademicDay.nextDay(after: entry.date)
-            let nextSync = entry.status == .signedOut ? midnight : max(entry.date.addingTimeInterval(5 * 60), scheduled)
-            var displayDates = Set(entry.assignments.flatMap {
-                [$0.due.addingTimeInterval(-urgentDeadlineInterval), $0.due.addingTimeInterval(-60), $0.due, $0.closes]
-            }.filter { entry.date < $0 && $0 < nextSync })
-            if midnight <= nextSync { displayDates.insert(midnight) }
-            if context.family == .systemMedium, let timetable = entry.snapshot?.timetable {
-                // Keep the end-of-class change available even if WidgetKit delays the next sync.
-                let today = TimetableDay(classes: timetable, at: entry.date)
-                displayDates.formUnion(today.changeDates.filter { $0 > entry.date })
+        Task { @MainActor in
+            var delivered = false
+            let fallback = Task { @MainActor in
+                do { try await Task.sleep(for: .seconds(1)) }
+                catch { return }
+                delivered = true
+                completion(makeTimeline(from: cachedEntry(), family: context.family))
             }
-            if #unavailable(iOS 18.0, macOS 15.0), entry.snapshot != nil {
-                // Older iOS needs entries for text updates, independent of TACT requests.
-                let interval: TimeInterval = 5 * 60
-                let offsets = stride(from: interval, to: nextSync.timeIntervalSince(entry.date), by: interval)
-                displayDates.formUnion(offsets.map { entry.date.addingTimeInterval($0) })
+            let entry = await WidgetBackgroundSync.shared.entry()
+            fallback.cancel()
+            if !delivered {
+                completion(makeTimeline(from: entry, family: context.family))
             }
-            let entries = [entry] + displayDates.sorted().map {
-                var future = entry
-                future.date = $0
-                return future
-            }
-            completion(Timeline(entries: entries, policy: .after(nextSync)))
         }
+    }
+
+    private func cachedEntry() -> AssignmentEntry {
+        do {
+            guard let session = try TACTStore.session() else {
+                return AssignmentEntry(date: .now, snapshot: nil, status: .signedOut, rooms: TimetableRooms.values)
+            }
+            let snapshot = TACTStore.snapshot(for: session.id)
+            return AssignmentEntry(date: .now, snapshot: snapshot, status: .ready, rooms: TimetableRooms.values)
+        } catch {
+            return AssignmentEntry(date: .now, snapshot: nil, status: .delayed, rooms: TimetableRooms.values)
+        }
+    }
+
+    private func makeTimeline(from cached: AssignmentEntry, family: WidgetFamily) -> Timeline<AssignmentEntry> {
+        var entry = cached
+        entry.rooms = TimetableRooms.values
+        loadSummaries(into: &entry, for: family)
+        let lastAttempt = entry.lastAttemptAt ?? entry.snapshot?.syncedAt ?? entry.date
+        let scheduled = WidgetSyncSchedule.nextAttempt(after: lastAttempt)
+        let midnight = AcademicDay.nextDay(after: entry.date)
+        let nextSync = entry.status == .signedOut ? midnight : max(entry.date.addingTimeInterval(5 * 60), scheduled)
+        var displayDates = Set(entry.assignments.flatMap {
+            [$0.due.addingTimeInterval(-urgentDeadlineInterval), $0.due.addingTimeInterval(-60), $0.due, $0.closes]
+        }.filter { entry.date < $0 && $0 < nextSync })
+        if midnight <= nextSync { displayDates.insert(midnight) }
+        if family == .systemMedium, let timetable = entry.snapshot?.timetable {
+            // Keep the end-of-class change available even if WidgetKit delays the next sync.
+            let today = TimetableDay(classes: timetable, at: entry.date)
+            displayDates.formUnion(today.changeDates.filter { $0 > entry.date })
+        }
+        if (family == .systemLarge || family == .systemExtraLarge || !Self.usesDynamicDates), entry.snapshot != nil {
+            // Update static countdowns independently of TACT requests.
+            let interval: TimeInterval = 5 * 60
+            let offsets = stride(from: interval, to: nextSync.timeIntervalSince(entry.date), by: interval)
+            displayDates.formUnion(offsets.map { entry.date.addingTimeInterval($0) })
+        }
+        let entries = [entry] + displayDates.sorted().map {
+            var future = entry
+            future.date = $0
+            return future
+        }
+        return Timeline(entries: entries, policy: .after(nextSync))
+    }
+
+    private static var usesDynamicDates: Bool {
+        if #available(iOS 18.0, macOS 15.0, *) { return true }
+        return false
     }
 
     private func loadSummaries(into entry: inout AssignmentEntry, for family: WidgetFamily) {
@@ -105,6 +133,8 @@ struct AssignmentWidgetView: View {
         WidgetCard(entry: entry, compact: family == .systemSmall, large: family == .systemLarge,
                    extraLarge: family == .systemExtraLarge)
             .containerBackground(WidgetPalette.background(colorScheme), for: .widget)
+            .widgetURL((family == .systemLarge || family == .systemExtraLarge)
+                       ? entry.assignments.first(where: { $0.detailURL != nil })?.detailURL : nil)
     }
 }
 
@@ -232,14 +262,7 @@ struct WidgetCard: View {
         return VStack(alignment: .leading, spacing: 6) {
             ForEach(assignments) { assignment in
                 if assignment.id != assignments.first?.id { Divider() }
-                if let url = assignment.detailURL {
-                    Link(destination: url) {
-                        summaryRow(assignment, lines: lines)
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    summaryRow(assignment, lines: lines)
-                }
+                summaryRow(assignment, lines: lines)
             }
         }
     }
@@ -248,7 +271,7 @@ struct WidgetCard: View {
         let preview = entry.summaries[assignment.id]
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(courseName(assignment))
+                Text(assignment.displayCourse)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -287,7 +310,7 @@ struct WidgetCard: View {
     private func nextAssignment(_ assignment: Assignment) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(courseName(assignment))
+                Text(assignment.displayCourse)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -318,7 +341,7 @@ struct WidgetCard: View {
                     let columnWidth = max(0, (geometry.size.width - 2 * spacing) / 3)
 
                     HStack(spacing: spacing) {
-                        Text(courseName(assignment))
+                        Text(assignment.displayCourse)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.secondary)
                             .minimumScaleFactor(0.84)
@@ -352,7 +375,7 @@ struct WidgetCard: View {
         if remaining <= 0 { return Text("締切超過").foregroundColor(color) }
         if remaining < 60 { return Text("あと1分未満").foregroundColor(color) }
 
-        if #available(iOS 18.0, macOS 15.0, *) {
+        if #available(iOS 18.0, macOS 15.0, *), !large, !extraLarge {
             let format = SystemFormatStyle.DateOffset(
                 to: assignment.due, allowedFields: [.day, .hour, .minute], maxFieldCount: 2, sign: .never
             ).calendar(displayCalendar)
@@ -385,7 +408,7 @@ struct WidgetCard: View {
         case .ready, .signedOut: label = (snapshot.failedCourseCount ?? 0) > 0 ? "一部同期" : "同期"
         }
         let elapsed: Text
-        if #available(iOS 18.0, macOS 15.0, *) {
+        if #available(iOS 18.0, macOS 15.0, *), !large, !extraLarge {
             let format = SystemFormatStyle.DateReference(
                 to: snapshot.syncedAt, allowedFields: [.minute, .hour, .day], thresholdField: .day
             ).calendar(displayCalendar)
@@ -418,13 +441,7 @@ struct WidgetCard: View {
         assignment.isQuiz == true ? "小テスト · \(assignment.title)" : assignment.title
     }
 
-    private func courseName(_ assignment: Assignment) -> String {
-        let suffix = #/\s*[（(]\s*[0-9０-９]{4}年度?[^）)]*[）)](?:\s*[（(]\s*旧\s*[:：][^）)]*[）)])?\s*$/#
-        guard let range = assignment.course.firstMatch(of: suffix)?.range, range.lowerBound != assignment.course.startIndex else {
-            return assignment.course
-        }
-        return String(assignment.course[..<range.lowerBound])
-    }
+
 }
 
 @main
