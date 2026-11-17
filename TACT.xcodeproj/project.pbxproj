@@ -10,8 +10,11 @@
 		20D1046D20BA4CB0C8E92365 /* Assignments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C44F0637A921AC8EB8CE03F /* Assignments.swift */; };
 		31B0F433A5B897F06892EECA /* Timetable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833A545E2DB52B784E77117B /* Timetable.swift */; };
 		33215FAC218C78605D4110F4 /* TACTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D696B9D5F5063A422441837 /* TACTClient.swift */; };
+		4A36A648F3B15D1CA22F0285 /* AssignmentSummaries.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21CF1DE5AEC600E0E05B0C7D /* AssignmentSummaries.swift */; };
+		5BB15F96E39F693A61EF2EAD /* AssignmentDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56685D8B1135D0D538C59D4E /* AssignmentDetailView.swift */; };
 		61C1E0870432D8E6D44A50A2 /* Timetable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833A545E2DB52B784E77117B /* Timetable.swift */; };
 		685AB3BCB995F08D5DAB63BC /* TimetableScreenshotReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF84A0E5BC9E3BA99E00AB74 /* TimetableScreenshotReader.swift */; };
+		7C7E08F5483F4017D2D01051 /* AssignmentSummaries.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21CF1DE5AEC600E0E05B0C7D /* AssignmentSummaries.swift */; };
 		7F6CB485E8BCC35195D46F47 /* WeeklyTimetableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F45AE1C78D8F98C62B9FDE3 /* WeeklyTimetableView.swift */; };
 		83073E9194E82E055275C3D8 /* Assignments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C44F0637A921AC8EB8CE03F /* Assignments.swift */; };
 		8DE04D44C9EBADAE62E72FA2 /* TACTWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD088B27211C0FAA716DF176 /* TACTWidget.swift */; };
@@ -19,7 +22,9 @@
 		C076384B3566BC2FDCEC92D6 /* TimetableWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98CEE9E04C4FDF7A4F6BFAA4 /* TimetableWidget.swift */; };
 		C6569470C5570BED6193ECF8 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EA8DF8A47A39B1A4612B8E0 /* SignInView.swift */; };
 		C78CE616ED10506A15EABFB5 /* TACTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D696B9D5F5063A422441837 /* TACTClient.swift */; };
+		DCB6E7A98EFE0A89FE38682F /* AssignmentContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB0C1E21F3416C83BBB16DE9 /* AssignmentContent.swift */; };
 		E00C353643365F5A1C6CFE1B /* TimetableEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842878AEFEB2F50ED47649D0 /* TimetableEditor.swift */; };
+		EBD811B2A099EAFB586A07EB /* AssignmentSummaryWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CD4CA4A906331CCA4BCD50D /* AssignmentSummaryWorker.swift */; };
 		F06806348DEAF362827A1389 /* WidgetBackgroundSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FE47B21C21C2C7A5F6085C8 /* WidgetBackgroundSync.swift */; };
 		F8B918982AE271B774EE3A35 /* TACTApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7CEA418DD9F4A2A2D8C401B /* TACTApp.swift */; };
 /* End PBXBuildFile section */
@@ -50,16 +55,20 @@
 
 /* Begin PBXFileReference section */
 		0EA8DF8A47A39B1A4612B8E0 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
+		21CF1DE5AEC600E0E05B0C7D /* AssignmentSummaries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignmentSummaries.swift; sourceTree = "<group>"; };
 		2D696B9D5F5063A422441837 /* TACTClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TACTClient.swift; sourceTree = "<group>"; };
 		3C44F0637A921AC8EB8CE03F /* Assignments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Assignments.swift; sourceTree = "<group>"; };
 		4F45AE1C78D8F98C62B9FDE3 /* WeeklyTimetableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyTimetableView.swift; sourceTree = "<group>"; };
 		53E64664148684C1EADFCCD0 /* TACTWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = TACTWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		56685D8B1135D0D538C59D4E /* AssignmentDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignmentDetailView.swift; sourceTree = "<group>"; };
 		5FE47B21C21C2C7A5F6085C8 /* WidgetBackgroundSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBackgroundSync.swift; sourceTree = "<group>"; };
+		6CD4CA4A906331CCA4BCD50D /* AssignmentSummaryWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignmentSummaryWorker.swift; sourceTree = "<group>"; };
 		833A545E2DB52B784E77117B /* Timetable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timetable.swift; sourceTree = "<group>"; };
 		842878AEFEB2F50ED47649D0 /* TimetableEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableEditor.swift; sourceTree = "<group>"; };
 		98CEE9E04C4FDF7A4F6BFAA4 /* TimetableWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableWidget.swift; sourceTree = "<group>"; };
 		A7CEA418DD9F4A2A2D8C401B /* TACTApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TACTApp.swift; sourceTree = "<group>"; };
 		BA594F8EAAE593F35F029F1C /* TACT.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TACT.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EB0C1E21F3416C83BBB16DE9 /* AssignmentContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignmentContent.swift; sourceTree = "<group>"; };
 		FD088B27211C0FAA716DF176 /* TACTWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TACTWidget.swift; sourceTree = "<group>"; };
 		FF84A0E5BC9E3BA99E00AB74 /* TimetableScreenshotReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableScreenshotReader.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -79,6 +88,7 @@
 			isa = PBXGroup;
 			children = (
 				3C44F0637A921AC8EB8CE03F /* Assignments.swift */,
+				21CF1DE5AEC600E0E05B0C7D /* AssignmentSummaries.swift */,
 				2D696B9D5F5063A422441837 /* TACTClient.swift */,
 				833A545E2DB52B784E77117B /* Timetable.swift */,
 			);
@@ -97,6 +107,9 @@
 		BBCBBB7B7652ECB8CB854A61 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				EB0C1E21F3416C83BBB16DE9 /* AssignmentContent.swift */,
+				56685D8B1135D0D538C59D4E /* AssignmentDetailView.swift */,
+				6CD4CA4A906331CCA4BCD50D /* AssignmentSummaryWorker.swift */,
 				0EA8DF8A47A39B1A4612B8E0 /* SignInView.swift */,
 				A7CEA418DD9F4A2A2D8C401B /* TACTApp.swift */,
 				842878AEFEB2F50ED47649D0 /* TimetableEditor.swift */,
@@ -191,6 +204,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DCB6E7A98EFE0A89FE38682F /* AssignmentContent.swift in Sources */,
+				5BB15F96E39F693A61EF2EAD /* AssignmentDetailView.swift in Sources */,
+				7C7E08F5483F4017D2D01051 /* AssignmentSummaries.swift in Sources */,
+				EBD811B2A099EAFB586A07EB /* AssignmentSummaryWorker.swift in Sources */,
 				83073E9194E82E055275C3D8 /* Assignments.swift in Sources */,
 				C6569470C5570BED6193ECF8 /* SignInView.swift in Sources */,
 				F8B918982AE271B774EE3A35 /* TACTApp.swift in Sources */,
@@ -206,6 +223,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4A36A648F3B15D1CA22F0285 /* AssignmentSummaries.swift in Sources */,
 				20D1046D20BA4CB0C8E92365 /* Assignments.swift in Sources */,
 				C78CE616ED10506A15EABFB5 /* TACTClient.swift in Sources */,
 				8DE04D44C9EBADAE62E72FA2 /* TACTWidget.swift in Sources */,
@@ -277,6 +295,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -289,6 +308,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -308,6 +328,7 @@
 				CODE_SIGN_ENTITLEMENTS = Configuration/TACT.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Configuration/TACT.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TACT;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -371,6 +392,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -389,6 +411,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -409,6 +432,7 @@
 				CODE_SIGN_ENTITLEMENTS = Configuration/TACT.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Configuration/TACT.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TACT;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				LD_RUNPATH_SEARCH_PATHS = (

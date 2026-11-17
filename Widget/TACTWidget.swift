@@ -7,6 +7,7 @@ struct AssignmentEntry: TimelineEntry {
     let status: SyncStatus
     var lastAttemptAt: Date? = nil
     var rooms: [String: String] = [:]
+    var summaries: [String: AssignmentSummaryPreview] = [:]
     var assignments: [Assignment] { snapshot?.upcoming(at: date) ?? [] }
 }
 
@@ -32,7 +33,11 @@ struct AssignmentProvider: TimelineProvider {
                        due: now.addingTimeInterval(52 * 3600), closes: now.addingTimeInterval(52 * 3600), submitted: false)
         ]
         let snapshot = Snapshot(sessionID: UUID(), syncedAt: now, assignments: examples)
-        return AssignmentEntry(date: now, snapshot: snapshot, status: .ready)
+        let summaries = [
+            "example-1": AssignmentSummaryPreview(text: "指定の係数で応答を計算し、グラフと考察を1つのPDFにまとめて提出する。", includesAllPDFs: true),
+            "example-3": AssignmentSummaryPreview(text: "配布された文法に従って構文木を描き、導出手順をレポートに記載する。", includesAllPDFs: true)
+        ]
+        return AssignmentEntry(date: now, snapshot: snapshot, status: .ready, summaries: summaries)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (AssignmentEntry) -> Void) {
@@ -42,14 +47,17 @@ struct AssignmentProvider: TimelineProvider {
         }
         let session = try? TACTStore.session()
         let snapshot = session.flatMap { TACTStore.snapshot(for: $0.id) }
-        completion(AssignmentEntry(date: .now, snapshot: snapshot, status: session == nil ? .signedOut : .ready,
-                                   rooms: TimetableRooms.values))
+        var entry = AssignmentEntry(date: .now, snapshot: snapshot, status: session == nil ? .signedOut : .ready,
+                                    rooms: TimetableRooms.values)
+        loadSummaries(into: &entry, for: context.family)
+        completion(entry)
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<AssignmentEntry>) -> Void) {
         Task {
             var entry = await WidgetBackgroundSync.shared.entry()
             entry.rooms = TimetableRooms.values
+            loadSummaries(into: &entry, for: context.family)
 
             let lastAttempt = entry.lastAttemptAt ?? entry.snapshot?.syncedAt ?? entry.date
             let scheduled = WidgetSyncSchedule.nextAttempt(after: lastAttempt)
@@ -78,6 +86,14 @@ struct AssignmentProvider: TimelineProvider {
             completion(Timeline(entries: entries, policy: .after(nextSync)))
         }
     }
+
+    private func loadSummaries(into entry: inout AssignmentEntry, for family: WidgetFamily) {
+        guard family == .systemLarge, let snapshot = entry.snapshot, let account = snapshot.summaryAccount else { return }
+        // Load a few extra entries so the next item can appear when a deadline passes.
+        for assignment in snapshot.upcoming(at: entry.date).filter({ $0.isQuiz != true }).prefix(8) {
+            entry.summaries[assignment.id] = AssignmentSummaryStore.preview(for: assignment, account: account)
+        }
+    }
 }
 
 struct AssignmentWidgetView: View {
@@ -86,7 +102,7 @@ struct AssignmentWidgetView: View {
     var entry: AssignmentEntry
 
     var body: some View {
-        WidgetCard(entry: entry, compact: family == .systemSmall)
+        WidgetCard(entry: entry, compact: family == .systemSmall, large: family == .systemLarge)
             .containerBackground(WidgetPalette.background(colorScheme), for: .widget)
     }
 }
@@ -109,6 +125,7 @@ struct WidgetCard: View {
     @Environment(\.colorScheme) private var colorScheme
     let entry: AssignmentEntry
     let compact: Bool
+    var large = false
 
     private var displayCalendar: Calendar {
         var calendar = Calendar.current
@@ -117,6 +134,14 @@ struct WidgetCard: View {
     }
 
     var body: some View {
+        if large {
+            summaryCard
+        } else {
+            standardCard
+        }
+    }
+
+    private var standardCard: some View {
         VStack(alignment: .leading, spacing: compact ? 5 : 2) {
             if let first = entry.assignments.first {
                 if compact {
@@ -157,6 +182,96 @@ struct WidgetCard: View {
         .padding(.top, compact ? 14 : 8)
         .padding(.bottom, compact ? 11 : 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text("締切の近い課題")
+                    .font(.system(size: 17, weight: .semibold))
+                    .accessibilityAddTraits(.isHeader)
+                    .fixedSize()
+                Spacer(minLength: 0)
+                if let snapshot = entry.snapshot { syncStatus(snapshot, trailing: true) }
+            }
+            Divider()
+
+            if entry.assignments.isEmpty {
+                Text(emptyMessage)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            } else {
+                let assignments = Array(entry.assignments.prefix(3))
+                let contentCount = assignments.count { assignment in
+                    let preview = entry.summaries[assignment.id]
+                    return preview?.text != nil || preview?.originalExcerpt != nil
+                }
+                let lines = contentCount <= 1 ? 8 : contentCount == 2 ? 4 : 3
+                ViewThatFits(in: .vertical) {
+                    summaryRows(assignments, lines: lines)
+                        .fixedSize(horizontal: false, vertical: true)
+                    summaryRows(assignments, lines: 2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    summaryRows(assignments, lines: 1)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func summaryRows(_ assignments: [Assignment], lines: Int) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(assignments) { assignment in
+                if assignment.id != assignments.first?.id { Divider() }
+                if let url = assignment.detailURL {
+                    Link(destination: url) { summaryRow(assignment, lines: lines) }
+                } else {
+                    summaryRow(assignment, lines: lines)
+                }
+            }
+        }
+    }
+
+    private func summaryRow(_ assignment: Assignment, lines: Int) -> some View {
+        let preview = entry.summaries[assignment.id]
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(courseName(assignment))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                deadline(assignment)
+                    .font(.system(size: 12, weight: .semibold))
+                    .monospacedDigit()
+                    .fixedSize()
+            }
+            Text(title(assignment))
+                .font(.system(size: 15, weight: .semibold))
+                .lineLimit(1)
+            if let summary = preview?.text {
+                Text((preview?.includesAllPDFs == false ? "一部PDF未反映 · " : "") + summary.split(whereSeparator: \.isNewline).joined(separator: " "))
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(lines)
+                    .privacySensitive()
+            } else if let excerpt = preview?.originalExcerpt {
+                Text("指示文 · " + excerpt.split(whereSeparator: \.isNewline).joined(separator: " "))
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(lines)
+                    .privacySensitive()
+            } else if assignment.isQuiz != true {
+                Text("内容はアプリで確認")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .foregroundStyle(.primary)
+        .accessibilityElement(children: .combine)
     }
 
     private func nextAssignment(_ assignment: Assignment) -> some View {
@@ -309,8 +424,8 @@ struct TACTWidget: Widget {
             AssignmentWidgetView(entry: entry)
         }
         .configurationDisplayName("TACTの課題・小テスト")
-        .description("横長サイズは、締切が近い未提出項目と今日の時間割を表示します。")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .description("横長は今日の時間割、大サイズは締切が近い課題とその内容を表示します。")
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
         .contentMarginsDisabled()
         .onBackgroundURLSessionEvents(matching: WidgetBackgroundSync.identifier) { _, completion in
             WidgetBackgroundSync.shared.receiveEvents(completion: completion)

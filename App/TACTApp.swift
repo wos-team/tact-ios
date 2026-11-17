@@ -4,6 +4,8 @@ import WidgetKit
 
 @main
 struct TACTApp: App {
+    @UIApplicationDelegateAdaptor(SummaryBackgroundRegistration.self) private var summaryRegistration
+
     var body: some Scene {
         WindowGroup { AssignmentsView() }
     }
@@ -11,6 +13,8 @@ struct TACTApp: App {
 
 struct AssignmentsView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @State private var activeTab: Tab = .assignments
+    @State private var assignmentPath: [String] = []
     @State private var snapshot: Snapshot?
     @State private var connected = false
     @State private var hasPendingSession = false
@@ -24,6 +28,8 @@ struct AssignmentsView: View {
     @State private var errorMessage: String?
     @State private var lastWidgetAttempt: WidgetSyncAttempt?
 
+    private enum Tab { case assignments, timetable }
+
     private struct RoomEditorRequest: Identifiable {
         let id = UUID()
         let term: TimetableTerm
@@ -33,21 +39,35 @@ struct AssignmentsView: View {
     }
 
     var body: some View {
-        TabView {
+        TabView(selection: $activeTab) {
             assignmentTab
                 .tabItem { Label("課題", systemImage: "checklist") }
+                .tag(Tab.assignments)
 
             WeeklyTimetableView(classes: snapshot?.timetable, rooms: rooms) { term, slot in
                 roomEditor = RoomEditorRequest(term: term, slot: slot)
             }
             .tabItem { Label("時間割", systemImage: "tablecells") }
+            .tag(Tab.timetable)
         }
         .task(id: scenePhase) {
             if scenePhase == .active {
                 rooms = TimetableRooms.values
                 lastWidgetAttempt = TACTStore.lastWidgetAttempt
                 await sync(force: false)
+                if !Task.isCancelled { AssignmentSummaryWorker.shared.enterForeground() }
+            } else if scenePhase == .background {
+                AssignmentSummaryWorker.shared.leaveForeground()
             }
+        }
+        .onOpenURL { url in
+            guard url.scheme == "tact-ios", url.host == "assignment", url.pathComponents.count == 2,
+                  let session = try? TACTStore.session(),
+                  let cached = TACTStore.snapshot(for: session.id), cached.summaryAccount != nil,
+                  let assignment = cached.assignments.first(where: { $0.detailURL == url }) else { return }
+            snapshot = cached
+            activeTab = .assignments
+            assignmentPath = [assignment.id]
         }
         .onChange(of: importPhoto) { _, selected in
             if let selected { roomEditor = RoomEditorRequest(term: .current(), photo: selected) }
@@ -76,7 +96,7 @@ struct AssignmentsView: View {
     }
 
     private var assignmentTab: some View {
-        NavigationStack {
+        NavigationStack(path: $assignmentPath) {
             List {
                 Section {
                     if connected || hasPendingSession {
@@ -156,17 +176,11 @@ struct AssignmentsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         ForEach(assignments) { assignment in
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(assignment.title).font(.headline)
-                                Text(assignment.courseLabel)
-                                if assignment.hasDeadline {
-                                    Text(assignment.due, format: .dateTime.month().day().weekday().hour().minute())
-                                        .foregroundStyle(assignment.due < .now ? Color.orange : Color.secondary)
-                                } else {
-                                    Text("締切なし").foregroundStyle(.secondary)
-                                }
+                            if assignment.isQuiz != true, snapshot.summaryAccount != nil {
+                                NavigationLink(value: assignment.id) { assignmentRow(assignment) }
+                            } else {
+                                assignmentRow(assignment)
                             }
-                            .padding(.vertical, 4)
                         }
                     }
 
@@ -174,8 +188,31 @@ struct AssignmentsView: View {
                 }
             }
             .navigationTitle("課題・小テスト")
+            .navigationDestination(for: String.self) { id in
+                if let snapshot, let account = snapshot.summaryAccount,
+                   let assignment = snapshot.assignments.first(where: { $0.id == id && $0.isQuiz != true }) {
+                    AssignmentDetailView(assignment: assignment, account: account)
+                        .id(account)
+                } else {
+                    ContentUnavailableView("課題を表示できません", systemImage: "doc.text")
+                }
+            }
             .refreshable { await sync(force: true) }
         }
+    }
+
+    private func assignmentRow(_ assignment: Assignment) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(assignment.title).font(.headline)
+            Text(assignment.courseLabel)
+            if assignment.hasDeadline {
+                Text(assignment.due, format: .dateTime.month().day().weekday().hour().minute())
+                    .foregroundStyle(assignment.due < .now ? Color.orange : Color.secondary)
+            } else {
+                Text("締切なし").foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     @MainActor
@@ -193,7 +230,7 @@ struct AssignmentsView: View {
                 return
             }
             guard let active else { return }
-            if !force, let snapshot, snapshot.timetable != nil, Date().timeIntervalSince(snapshot.syncedAt) < 5 * 60 { return }
+            if !force, let snapshot, snapshot.timetable != nil, snapshot.summaryAccount != nil, Date().timeIntervalSince(snapshot.syncedAt) < 5 * 60 { return }
             await fetch(active)
         } catch {
             errorMessage = error.localizedDescription
@@ -244,6 +281,7 @@ struct AssignmentsView: View {
             needsReconnect = false
             errorMessage = nil
             WidgetCenter.shared.reloadTimelines(ofKind: "TACTAssignments")
+            AssignmentSummaryWorker.shared.startAutomaticWork()
         } catch is CancellationError {
             return
         } catch {

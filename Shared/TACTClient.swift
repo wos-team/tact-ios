@@ -212,6 +212,7 @@ enum TACTClient {
                 "/direct/session/current.json", stage: "ログイン状態の確認", using: session, transport: transport
             )
             guard let userEid = identity.userEid, !userEid.isEmpty else { throw TACTError.signInRequired }
+            return userEid
         }
         async let sitesRequest = attempt {
             let sites: SiteResponse = try await load(
@@ -220,7 +221,7 @@ enum TACTClient {
             return sites
         }
         let (identity, sitesResult) = try await (identityRequest, sitesRequest)
-        try identity.value()
+        let userEid = try identity.value()
         let siteList = try sitesResult.value()
         var knownSites = Set<String>()
         let sites = siteList.site_collection.filter {
@@ -315,7 +316,8 @@ enum TACTClient {
             failedCourseCount: failedSites.count,
             startedAt: started,
             quizPlacements: quizPlacements,
-            timetable: sites.compactMap(TimetableClass.init(site:))
+            timetable: sites.compactMap(TimetableClass.init(site:)),
+            summaryAccount: AssignmentSummaryStore.digest(Data(userEid.utf8))
         )
     }
 
@@ -436,7 +438,7 @@ enum TACTClient {
         return try await read(placement)
     }
 
-    private static func encodePathSegment(_ value: String) -> String {
+    static func encodePathSegment(_ value: String) -> String {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_~"))
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
     }

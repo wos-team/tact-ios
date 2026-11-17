@@ -10,9 +10,16 @@ struct Assignment: Identifiable, Codable {
     var submitted: Bool
     var courseID: String? = nil
     var isQuiz: Bool? = nil
+    var contentRevision: String? = nil
 
     var courseLabel: String { isQuiz == true ? "小テスト · \(course)" : course }
     var hasDeadline: Bool { due != .distantFuture }
+
+    var detailURL: URL? {
+        guard isQuiz != true else { return nil }
+        let segment = TACTClient.encodePathSegment(id)
+        return URL(string: "tact-ios://assignment/\(segment)")
+    }
 }
 
 struct Snapshot: Codable {
@@ -23,6 +30,7 @@ struct Snapshot: Codable {
     var startedAt: Date? = nil
     var quizPlacements: [String: String]? = nil
     var timetable: [TimetableClass]? = nil
+    var summaryAccount: String? = nil
 
     func upcoming(at date: Date) -> [Assignment] {
         assignments
@@ -39,6 +47,23 @@ struct TACTAssignment: Decodable {
     struct Timestamp: Decodable {
         let epochSecond: TimeInterval
         var date: Date { Date(timeIntervalSince1970: epochSecond) }
+    }
+
+    struct Revision: Decodable {
+        let value: String
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let string = try? container.decode(String.self) {
+                value = string
+            } else if let number = try? container.decode(Double.self) {
+                value = String(number)
+            } else if let time = try? container.decode(Timestamp.self) {
+                value = String(time.epochSecond)
+            } else {
+                value = ""
+            }
+        }
     }
 
     struct Submission: Decodable {
@@ -59,6 +84,7 @@ struct TACTAssignment: Decodable {
     let dueTime: Timestamp?
     let closeTime: Timestamp?
     let openTime: Timestamp?
+    let timeLastModified: Revision?
     let status: String?
     let draft: Bool?
     let submissions: [Submission]?
@@ -74,7 +100,8 @@ struct TACTAssignment: Decodable {
             due: due,
             closes: closeTime?.date ?? due,
             submitted: submissions?.contains(where: \.isSubmitted) ?? false,
-            courseID: context
+            courseID: context,
+            contentRevision: timeLastModified?.value
         )
     }
 }
