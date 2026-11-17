@@ -8,12 +8,16 @@
 
 /* Begin PBXBuildFile section */
 		20D1046D20BA4CB0C8E92365 /* Assignments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C44F0637A921AC8EB8CE03F /* Assignments.swift */; };
+		31B0F433A5B897F06892EECA /* Timetable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833A545E2DB52B784E77117B /* Timetable.swift */; };
 		33215FAC218C78605D4110F4 /* TACTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D696B9D5F5063A422441837 /* TACTClient.swift */; };
+		61C1E0870432D8E6D44A50A2 /* Timetable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833A545E2DB52B784E77117B /* Timetable.swift */; };
 		83073E9194E82E055275C3D8 /* Assignments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C44F0637A921AC8EB8CE03F /* Assignments.swift */; };
 		8DE04D44C9EBADAE62E72FA2 /* TACTWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD088B27211C0FAA716DF176 /* TACTWidget.swift */; };
 		A731B2AA9FDD256AFC99E298 /* TACTWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 53E64664148684C1EADFCCD0 /* TACTWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C076384B3566BC2FDCEC92D6 /* TimetableWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98CEE9E04C4FDF7A4F6BFAA4 /* TimetableWidget.swift */; };
 		C6569470C5570BED6193ECF8 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EA8DF8A47A39B1A4612B8E0 /* SignInView.swift */; };
 		C78CE616ED10506A15EABFB5 /* TACTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D696B9D5F5063A422441837 /* TACTClient.swift */; };
+		E00C353643365F5A1C6CFE1B /* TimetableEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 842878AEFEB2F50ED47649D0 /* TimetableEditor.swift */; };
 		F06806348DEAF362827A1389 /* WidgetBackgroundSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FE47B21C21C2C7A5F6085C8 /* WidgetBackgroundSync.swift */; };
 		F8B918982AE271B774EE3A35 /* TACTApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7CEA418DD9F4A2A2D8C401B /* TACTApp.swift */; };
 /* End PBXBuildFile section */
@@ -48,6 +52,9 @@
 		3C44F0637A921AC8EB8CE03F /* Assignments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Assignments.swift; sourceTree = "<group>"; };
 		53E64664148684C1EADFCCD0 /* TACTWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = TACTWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5FE47B21C21C2C7A5F6085C8 /* WidgetBackgroundSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBackgroundSync.swift; sourceTree = "<group>"; };
+		833A545E2DB52B784E77117B /* Timetable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timetable.swift; sourceTree = "<group>"; };
+		842878AEFEB2F50ED47649D0 /* TimetableEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableEditor.swift; sourceTree = "<group>"; };
+		98CEE9E04C4FDF7A4F6BFAA4 /* TimetableWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableWidget.swift; sourceTree = "<group>"; };
 		A7CEA418DD9F4A2A2D8C401B /* TACTApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TACTApp.swift; sourceTree = "<group>"; };
 		BA594F8EAAE593F35F029F1C /* TACT.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TACT.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FD088B27211C0FAA716DF176 /* TACTWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TACTWidget.swift; sourceTree = "<group>"; };
@@ -69,6 +76,7 @@
 			children = (
 				3C44F0637A921AC8EB8CE03F /* Assignments.swift */,
 				2D696B9D5F5063A422441837 /* TACTClient.swift */,
+				833A545E2DB52B784E77117B /* Timetable.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -87,6 +95,7 @@
 			children = (
 				0EA8DF8A47A39B1A4612B8E0 /* SignInView.swift */,
 				A7CEA418DD9F4A2A2D8C401B /* TACTApp.swift */,
+				842878AEFEB2F50ED47649D0 /* TimetableEditor.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -95,6 +104,7 @@
 			isa = PBXGroup;
 			children = (
 				FD088B27211C0FAA716DF176 /* TACTWidget.swift */,
+				98CEE9E04C4FDF7A4F6BFAA4 /* TimetableWidget.swift */,
 				5FE47B21C21C2C7A5F6085C8 /* WidgetBackgroundSync.swift */,
 			);
 			path = Widget;
@@ -179,6 +189,8 @@
 				C6569470C5570BED6193ECF8 /* SignInView.swift in Sources */,
 				F8B918982AE271B774EE3A35 /* TACTApp.swift in Sources */,
 				33215FAC218C78605D4110F4 /* TACTClient.swift in Sources */,
+				61C1E0870432D8E6D44A50A2 /* Timetable.swift in Sources */,
+				E00C353643365F5A1C6CFE1B /* TimetableEditor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -189,6 +201,8 @@
 				20D1046D20BA4CB0C8E92365 /* Assignments.swift in Sources */,
 				C78CE616ED10506A15EABFB5 /* TACTClient.swift in Sources */,
 				8DE04D44C9EBADAE62E72FA2 /* TACTWidget.swift in Sources */,
+				31B0F433A5B897F06892EECA /* Timetable.swift in Sources */,
+				C076384B3566BC2FDCEC92D6 /* TimetableWidget.swift in Sources */,
 				F06806348DEAF362827A1389 /* WidgetBackgroundSync.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

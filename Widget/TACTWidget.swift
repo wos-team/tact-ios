@@ -2,10 +2,12 @@ import SwiftUI
 import WidgetKit
 
 struct AssignmentEntry: TimelineEntry {
-    let date: Date
+    var date: Date
     let snapshot: Snapshot?
     let status: SyncStatus
     var lastAttemptAt: Date? = nil
+    var showsTimetable = false
+    var timetable = Timetable()
     var assignments: [Assignment] { snapshot?.upcoming(at: date) ?? [] }
 }
 
@@ -41,19 +43,25 @@ struct AssignmentProvider: TimelineProvider {
         }
         let session = try? TACTStore.session()
         let snapshot = session.flatMap { TACTStore.snapshot(for: $0.id) }
-        completion(AssignmentEntry(date: .now, snapshot: snapshot, status: session == nil ? .signedOut : .ready))
+        completion(AssignmentEntry(date: .now, snapshot: snapshot, status: session == nil ? .signedOut : .ready,
+                                   showsTimetable: TimetableStore.showsTimetable, timetable: TimetableStore.load()))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<AssignmentEntry>) -> Void) {
         Task {
             let firstDayEnd = TACTStore.widgetFirstDayEnd
-            let entry = await WidgetBackgroundSync.shared.entry(firstDayEnd: firstDayEnd)
+            var entry = await WidgetBackgroundSync.shared.entry(firstDayEnd: firstDayEnd)
+            entry.showsTimetable = TimetableStore.showsTimetable
+            entry.timetable = TimetableStore.load()
+
             let lastAttempt = entry.lastAttemptAt ?? entry.snapshot?.syncedAt ?? entry.date
             let scheduled = WidgetSyncSchedule.nextAttempt(after: lastAttempt, at: entry.date, firstDayEnd: firstDayEnd)
-            let nextSync = max(entry.date.addingTimeInterval(5 * 60), scheduled)
+            let midnight = Timetable.nextDay(after: entry.date)
+            let nextSync = entry.status == .signedOut ? midnight : max(entry.date.addingTimeInterval(5 * 60), scheduled)
             var displayDates = Set(entry.assignments.flatMap {
                 [$0.due.addingTimeInterval(-urgentDeadlineInterval), $0.due.addingTimeInterval(-60), $0.due, $0.closes]
             }.filter { entry.date < $0 && $0 < nextSync })
+            if midnight <= nextSync { displayDates.insert(midnight) }
             if #unavailable(iOS 18.0, macOS 15.0), entry.snapshot != nil {
                 // Older iOS needs entries for text updates, independent of TACT requests.
                 let interval: TimeInterval = 5 * 60
@@ -61,9 +69,11 @@ struct AssignmentProvider: TimelineProvider {
                 displayDates.formUnion(offsets.map { entry.date.addingTimeInterval($0) })
             }
             let entries = [entry] + displayDates.sorted().map {
-                AssignmentEntry(date: $0, snapshot: entry.snapshot, status: entry.status, lastAttemptAt: entry.lastAttemptAt)
+                var future = entry
+                future.date = $0
+                return future
             }
-            completion(Timeline(entries: entries, policy: entry.status == .signedOut ? .never : .after(nextSync)))
+            completion(Timeline(entries: entries, policy: .after(nextSync)))
         }
     }
 }
@@ -74,8 +84,14 @@ struct AssignmentWidgetView: View {
     var entry: AssignmentEntry
 
     var body: some View {
-        WidgetCard(entry: entry, compact: family == .systemSmall)
-            .containerBackground(WidgetPalette.background(colorScheme), for: .widget)
+        Group {
+            if family == .systemMedium && entry.showsTimetable {
+                TimetableWidget(timetable: entry.timetable, date: entry.date)
+            } else {
+                WidgetCard(entry: entry, compact: family == .systemSmall)
+            }
+        }
+        .containerBackground(WidgetPalette.background(colorScheme), for: .widget)
     }
 }
 
@@ -117,11 +133,20 @@ struct WidgetCard: View {
                     .font(.system(size: 14, weight: .medium))
                     .frame(maxHeight: .infinity, alignment: .center)
             }
-            if let snapshot = entry.snapshot {
+            if entry.snapshot != nil || !compact {
                 Spacer(minLength: 0)
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: compact ? 4 : 2) {
                     Divider()
-                    syncStatus(snapshot)
+                    HStack(spacing: 5) {
+                        if let snapshot = entry.snapshot {
+                            syncStatus(snapshot)
+                        } else {
+                            Spacer(minLength: 0)
+                        }
+                        if !compact {
+                            WidgetViewSwitch(showsTimetable: true)
+                        }
+                    }
                 }
                 .layoutPriority(1)
             }
@@ -276,7 +301,7 @@ struct TACTWidget: Widget {
             AssignmentWidgetView(entry: entry)
         }
         .configurationDisplayName("TACTの課題・小テスト")
-        .description("締切が近い未提出の課題・小テストを表示します。")
+        .description("横長サイズでは、提出予定と今日の時間割を切り替えられます。")
         .supportedFamilies([.systemSmall, .systemMedium])
         .contentMarginsDisabled()
         .onBackgroundURLSessionEvents(matching: WidgetBackgroundSync.identifier) { _, completion in

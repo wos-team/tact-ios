@@ -22,6 +22,7 @@ struct AssignmentsView: View {
     @State private var needsReconnect = false
     @State private var syncing = false
     @State private var showsSignIn = false
+    @State private var showsTimetable = false
     @State private var errorMessage: String?
     @State private var lastWidgetAttempt: WidgetSyncAttempt?
 
@@ -107,6 +108,13 @@ struct AssignmentsView: View {
                 }
             }
             .navigationTitle("TACT 課題・小テスト")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showsTimetable = true } label: {
+                        Label("時間割", systemImage: "calendar")
+                    }
+                }
+            }
             .refreshable { await sync(force: true) }
         }
         .task(id: scenePhase) {
@@ -115,6 +123,7 @@ struct AssignmentsView: View {
                 await sync(force: false)
             }
         }
+        .sheet(isPresented: $showsTimetable) { TimetableEditor() }
         .sheet(isPresented: $showsSignIn) {
             NavigationStack {
                 SignInView { cookies in
