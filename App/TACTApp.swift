@@ -17,13 +17,65 @@ struct AssignmentsView: View {
     @State private var needsReconnect = false
     @State private var syncing = false
     @State private var showsSignIn = false
-    @State private var showsTimetable = false
+    @State private var roomEditor: RoomEditorRequest?
+    @State private var rooms = TimetableRooms.values
     @State private var importPhoto: PhotosPickerItem?
     @AppStorage("finishedTimetableRoomSetup") private var finishedTimetableRoomSetup = false
     @State private var errorMessage: String?
     @State private var lastWidgetAttempt: WidgetSyncAttempt?
 
+    private struct RoomEditorRequest: Identifiable {
+        let id = UUID()
+        let term: TimetableTerm
+        var slot: TimetableSlot? = nil
+        var photo: PhotosPickerItem? = nil
+        var allowsImport = true
+    }
+
     var body: some View {
+        TabView {
+            assignmentTab
+                .tabItem { Label("課題", systemImage: "checklist") }
+
+            WeeklyTimetableView(classes: snapshot?.timetable, rooms: rooms) { term, slot in
+                roomEditor = RoomEditorRequest(term: term, slot: slot)
+            }
+            .tabItem { Label("時間割", systemImage: "tablecells") }
+        }
+        .task(id: scenePhase) {
+            if scenePhase == .active {
+                rooms = TimetableRooms.values
+                lastWidgetAttempt = TACTStore.lastWidgetAttempt
+                await sync(force: false)
+            }
+        }
+        .onChange(of: importPhoto) { _, selected in
+            if let selected { roomEditor = RoomEditorRequest(term: .current(), photo: selected) }
+        }
+        .sheet(item: $roomEditor, onDismiss: { importPhoto = nil }) { request in
+            TimetableEditor(timetable: snapshot?.timetable, term: request.term, slot: request.slot,
+                            photo: request.photo, allowsImport: request.allowsImport) {
+                rooms = TimetableRooms.values
+                finishedTimetableRoomSetup = true
+            }
+        }
+        .sheet(isPresented: $showsSignIn) {
+            NavigationStack {
+                SignInView { cookies in
+                    Task { await completeSignIn(cookies) }
+                }
+                .navigationTitle("TACTに接続")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("閉じる") { showsSignIn = false }
+                    }
+                }
+            }
+        }
+    }
+
+    private var assignmentTab: some View {
         NavigationStack {
             List {
                 Section {
@@ -83,6 +135,9 @@ struct AssignmentsView: View {
                         PhotosPicker(selection: $importPhoto, matching: .images) {
                             Label("スクリーンショットを選ぶ", systemImage: "photo")
                         }
+                        Button("教室を手入力") {
+                            roomEditor = RoomEditorRequest(term: .current(), allowsImport: false)
+                        }
                         Button("あとで", role: .cancel) { finishedTimetableRoomSetup = true }
                     } header: {
                         Text("TACT連携完了")
@@ -118,43 +173,8 @@ struct AssignmentsView: View {
                     Link("TACTをブラウザで開く", destination: TACTClient.home)
                 }
             }
-            .navigationTitle("TACT 課題・小テスト")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showsTimetable = true } label: {
-                        Label("教室の登録", systemImage: "calendar")
-                    }
-                }
-            }
+            .navigationTitle("課題・小テスト")
             .refreshable { await sync(force: true) }
-        }
-        .task(id: scenePhase) {
-            if scenePhase == .active {
-                lastWidgetAttempt = TACTStore.lastWidgetAttempt
-                await sync(force: false)
-            }
-        }
-        .onChange(of: importPhoto) { _, selected in
-            if selected != nil { showsTimetable = true }
-        }
-        .sheet(isPresented: $showsTimetable, onDismiss: { importPhoto = nil }) {
-            TimetableEditor(timetable: snapshot?.timetable, photo: importPhoto) {
-                finishedTimetableRoomSetup = true
-            }
-        }
-        .sheet(isPresented: $showsSignIn) {
-            NavigationStack {
-                SignInView { cookies in
-                    Task { await completeSignIn(cookies) }
-                }
-                .navigationTitle("TACTに接続")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("閉じる") { showsSignIn = false }
-                    }
-                }
-            }
         }
     }
 

@@ -114,15 +114,38 @@ struct AcademicDay {
     }
 }
 
-struct TimetableDay {
-    private static let periodTimes: [Range<Int>] = [
-        525..<615,   // 08:45–10:15
-        630..<720,   // 10:30–12:00
-        780..<870,   // 13:00–14:30
-        885..<975,   // 14:45–16:15
-        990..<1080   // 16:30–18:00
-    ]
+enum TimetablePeriod {
+    static let standard = [525..<615, 630..<720, 780..<870, 885..<975, 990..<1080]
 
+    static func clock(_ minutes: Int) -> String {
+        String(format: "%02d:%02d", minutes / 60, minutes % 60)
+    }
+}
+
+struct TimetableTerm: Equatable {
+    let year: Int
+    let index: Int
+
+    static func current(at date: Date = .now) -> Self {
+        let academicDay = AcademicDay(on: date)
+        let month = AcademicDay.calendar.component(.month, from: date)
+        let quarter = academicDay.quarter ?? ([4, 5, 10, 11].contains(month) ? 1 : 2)
+        return Self(year: academicDay.year, index: academicDay.season == .spring ? quarter : quarter + 2)
+    }
+
+    var label: String {
+        let season = index <= 2 ? "春" : "秋"
+        return season + "\((index - 1) % 2 + 1)期"
+    }
+
+    func includes(_ lesson: TimetableClass) -> Bool {
+        let season: TimetableClass.Season = index <= 2 ? .spring : .fall
+        return lesson.year == year && (lesson.season == season || lesson.season == .fullYear)
+            && (lesson.quarter == nil || lesson.quarter == (index - 1) % 2 + 1)
+    }
+}
+
+struct TimetableDay {
     let lessonsByPeriod: [Int: [TimetableClass]]
     let activePeriod: Int?
     let changeDates: [Date]
@@ -146,7 +169,7 @@ struct TimetableDay {
         }
 
         let startOfDay = calendar.startOfDay(for: date)
-        let occupiedPeriods = Self.periodTimes.enumerated().compactMap { index, time -> (Int, Range<Date>)? in
+        let occupiedPeriods = TimetablePeriod.standard.enumerated().compactMap { index, time -> (Int, Range<Date>)? in
             let period = index + 1
             guard lessons[period] != nil else { return nil }
             let start = startOfDay.addingTimeInterval(TimeInterval(time.lowerBound * 60))

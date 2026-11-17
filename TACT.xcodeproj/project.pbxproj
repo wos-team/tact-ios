@@ -12,6 +12,7 @@
 		33215FAC218C78605D4110F4 /* TACTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D696B9D5F5063A422441837 /* TACTClient.swift */; };
 		61C1E0870432D8E6D44A50A2 /* Timetable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833A545E2DB52B784E77117B /* Timetable.swift */; };
 		685AB3BCB995F08D5DAB63BC /* TimetableScreenshotReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF84A0E5BC9E3BA99E00AB74 /* TimetableScreenshotReader.swift */; };
+		7F6CB485E8BCC35195D46F47 /* WeeklyTimetableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F45AE1C78D8F98C62B9FDE3 /* WeeklyTimetableView.swift */; };
 		83073E9194E82E055275C3D8 /* Assignments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C44F0637A921AC8EB8CE03F /* Assignments.swift */; };
 		8DE04D44C9EBADAE62E72FA2 /* TACTWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD088B27211C0FAA716DF176 /* TACTWidget.swift */; };
 		A731B2AA9FDD256AFC99E298 /* TACTWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 53E64664148684C1EADFCCD0 /* TACTWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -51,6 +52,7 @@
 		0EA8DF8A47A39B1A4612B8E0 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		2D696B9D5F5063A422441837 /* TACTClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TACTClient.swift; sourceTree = "<group>"; };
 		3C44F0637A921AC8EB8CE03F /* Assignments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Assignments.swift; sourceTree = "<group>"; };
+		4F45AE1C78D8F98C62B9FDE3 /* WeeklyTimetableView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyTimetableView.swift; sourceTree = "<group>"; };
 		53E64664148684C1EADFCCD0 /* TACTWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = TACTWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5FE47B21C21C2C7A5F6085C8 /* WidgetBackgroundSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetBackgroundSync.swift; sourceTree = "<group>"; };
 		833A545E2DB52B784E77117B /* Timetable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timetable.swift; sourceTree = "<group>"; };
@@ -99,6 +101,7 @@
 				A7CEA418DD9F4A2A2D8C401B /* TACTApp.swift */,
 				842878AEFEB2F50ED47649D0 /* TimetableEditor.swift */,
 				FF84A0E5BC9E3BA99E00AB74 /* TimetableScreenshotReader.swift */,
+				4F45AE1C78D8F98C62B9FDE3 /* WeeklyTimetableView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -195,6 +198,7 @@
 				61C1E0870432D8E6D44A50A2 /* Timetable.swift in Sources */,
 				E00C353643365F5A1C6CFE1B /* TimetableEditor.swift in Sources */,
 				685AB3BCB995F08D5DAB63BC /* TimetableScreenshotReader.swift in Sources */,
+				7F6CB485E8BCC35195D46F47 /* WeeklyTimetableView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

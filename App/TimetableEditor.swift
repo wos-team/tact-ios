@@ -12,33 +12,34 @@ struct TimetableEditor: View {
     @State private var importDetails: TimetableScreenshot?
 
     let timetable: [TimetableClass]?
+    let term: TimetableTerm
+    let selectedSlot: TimetableSlot?
+    let allowsImport: Bool
     let onSaved: () -> Void
 
-    init(timetable: [TimetableClass]?, photo: PhotosPickerItem? = nil, onSaved: @escaping () -> Void) {
+    init(timetable: [TimetableClass]?, term: TimetableTerm = .current(), slot: TimetableSlot? = nil,
+         photo: PhotosPickerItem? = nil, allowsImport: Bool = true, onSaved: @escaping () -> Void) {
         self.timetable = timetable
+        self.term = term
+        selectedSlot = slot
+        self.allowsImport = allowsImport
         self.onSaved = onSaved
         _photo = State(initialValue: photo)
     }
 
     private var currentClasses: [TimetableClass] {
-        let day = AcademicDay(on: .now)
-        return (timetable ?? []).filter(day.isCurrentTerm).sorted { $0.name < $1.name }
+        (timetable ?? []).filter { lesson in
+            term.includes(lesson) && (selectedSlot.map { lesson.slots.contains($0) } ?? true)
+        }.sorted { $0.name < $1.name }
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    PhotosPicker(selection: $photo, matching: .images) {
-                        Label("すごい時間割のスクリーンショットを選ぶ", systemImage: "photo")
-                    }
-                    .disabled(reading || currentClasses.isEmpty)
-                    if reading { ProgressView("スクリーンショットを読み取り中") }
-                    if let errorMessage {
-                        Text(errorMessage).font(.footnote).foregroundStyle(.red)
-                    }
-                } footer: {
-                    Text("月〜金・1〜5限の表全体が入った画像を選んでください。読み取りは端末内で行います。")
+                if selectedSlot == nil && allowsImport {
+                    importSection
+                } else if let errorMessage {
+                    Text(errorMessage).font(.footnote).foregroundStyle(.red)
                 }
 
                 if let importDetails {
@@ -53,9 +54,9 @@ struct TimetableEditor: View {
                         VStack(alignment: .leading, spacing: 3) {
                             if let label = importDetails.termLabel { Text("画像の学期：\(label)") }
                             if isDifferentAcademicYear(importDetails) {
-                                Text("画像の年度が現在と異なります。登録するコマを選んでください。")
+                                Text("画像の年度が選択した年度と異なります。登録するコマを選んでください。")
                             }
-                            Text("現在のTACT時間割に曜日・時限で照合しています。保存前に授業名と教室を確認してください。")
+                            Text("表示中の学期のTACT時間割に曜日・時限で照合しています。保存前に授業名と教室を確認してください。")
                             if importDetails.unregisteredCount > 0 {
                                 Text("画像で教室が未登録：\(importDetails.unregisteredCount)コマ")
                             }
@@ -65,13 +66,13 @@ struct TimetableEditor: View {
                 } else {
                     Section {
                         if currentClasses.isEmpty {
-                            Text(timetable == nil ? "TACTと同期すると、履修中の授業が表示されます。" : "今期の曜日・時限を読み取れた授業はありません。")
+                            Text(timetable == nil ? "TACTと同期すると、履修中の授業が表示されます。" : "この学期の曜日・時限を読み取れた授業はありません。")
                                 .foregroundStyle(.secondary)
                         }
                         ForEach(currentClasses) { lesson in
                             VStack(alignment: .leading, spacing: 7) {
                                 Text(lesson.name).font(.subheadline.weight(.semibold))
-                                ForEach(lesson.slots, id: \.self) { slot in
+                                ForEach(lesson.slots.filter { selectedSlot == nil || $0 == selectedSlot }, id: \.self) { slot in
                                     HStack {
                                         Text(slot.label).font(.caption).foregroundStyle(.secondary)
                                         TextField("教室（例：工232）", text: room(for: lesson.id, slot: slot))
@@ -81,7 +82,7 @@ struct TimetableEditor: View {
                             }
                         }
                     } header: {
-                        Text("手入力")
+                        Text(selectedSlot?.label ?? "手入力")
                     }
                 }
             }
@@ -100,6 +101,21 @@ struct TimetableEditor: View {
             .task(id: photo) {
                 if let photo { await read(photo) }
             }
+        }
+    }
+
+    private var importSection: some View {
+        Section {
+            PhotosPicker(selection: $photo, matching: .images) {
+                Label("すごい時間割のスクリーンショットを選ぶ", systemImage: "photo")
+            }
+            .disabled(reading || currentClasses.isEmpty)
+            if reading { ProgressView("スクリーンショットを読み取り中") }
+            if let errorMessage {
+                Text(errorMessage).font(.footnote).foregroundStyle(.red)
+            }
+        } footer: {
+            Text("月〜金・1〜5限の表全体が入った画像を選んでください。読み取りは端末内で行います。")
         }
     }
 
@@ -171,7 +187,7 @@ struct TimetableEditor: View {
 
     private func isDifferentAcademicYear(_ screenshot: TimetableScreenshot) -> Bool {
         guard let label = screenshot.termLabel, let year = Int(label.prefix(4)) else { return false }
-        return year != AcademicDay(on: .now).year
+        return year != term.year
     }
 
     private func room(for id: String, slot: TimetableSlot) -> Binding<String> {
