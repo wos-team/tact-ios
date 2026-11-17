@@ -46,8 +46,16 @@ struct AssignmentProvider: TimelineProvider {
             let lastAttempt = entry.status == .ready ? entry.snapshot?.syncedAt ?? entry.date : entry.date
             let nextSync = max(entry.date.addingTimeInterval(5 * 60),
                                lastAttempt.addingTimeInterval(TACTClient.refreshInterval))
-            let closeTimes = Set(entry.assignments.map(\.closes)).filter { $0 < nextSync }
-            let entries = [entry] + closeTimes.sorted().map {
+            var displayDates = Set(entry.assignments.flatMap {
+                [$0.due.addingTimeInterval(-60), $0.due, $0.closes]
+            }.filter { entry.date < $0 && $0 < nextSync })
+            if #unavailable(iOS 18.0, macOS 15.0), entry.snapshot != nil {
+                // Older iOS needs entries for text updates, independent of TACT requests.
+                let interval: TimeInterval = 5 * 60
+                let offsets = stride(from: interval, to: nextSync.timeIntervalSince(entry.date), by: interval)
+                displayDates.formUnion(offsets.map { entry.date.addingTimeInterval($0) })
+            }
+            let entries = [entry] + displayDates.sorted().map {
                 AssignmentEntry(date: $0, snapshot: entry.snapshot, status: entry.status)
             }
             completion(Timeline(entries: entries, policy: entry.status == .signedOut ? .never : .after(nextSync)))
@@ -84,49 +92,36 @@ struct AssignmentProvider: TimelineProvider {
 
 struct AssignmentWidgetView: View {
     @Environment(\.widgetFamily) private var family
-    @Environment(\.colorScheme) private var colorScheme
     var entry: AssignmentEntry
 
     var body: some View {
         WidgetCard(entry: entry, compact: family == .systemSmall)
-            .containerBackground(for: .widget) {
-                WidgetPalette.background(dark: colorScheme == .dark)
-            }
-    }
-}
-
-private enum WidgetPalette {
-    static func background(dark: Bool) -> some View {
-        LinearGradient(colors: dark
-                       ? [Color(red: 0.12, green: 0.19, blue: 0.28), Color(red: 0.07, green: 0.11, blue: 0.18)]
-                       : [Color(red: 0.97, green: 0.98, blue: 1), Color(red: 0.89, green: 0.94, blue: 0.99)],
-                       startPoint: .topLeading, endPoint: .bottomTrailing)
+            .containerBackground(.fill.tertiary, for: .widget)
     }
 }
 
 struct WidgetCard: View {
-    @Environment(\.colorScheme) private var colorScheme
     let entry: AssignmentEntry
     let compact: Bool
 
-    private var dark: Bool { colorScheme == .dark }
-    private var blue: Color { dark ? Color(red: 0.58, green: 0.81, blue: 1) : Color(red: 0.12, green: 0.36, blue: 0.64) }
-    private var amber: Color { dark ? Color(red: 1, green: 0.77, blue: 0.42) : Color(red: 0.55, green: 0.29, blue: 0.05) }
-
-    private let dayFormat = Date.FormatStyle().month(.twoDigits).day(.twoDigits).locale(Locale(identifier: "ja_JP"))
-    private let timeFormat = Date.FormatStyle().hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(identifier: "ja_JP"))
+    private var displayCalendar: Calendar {
+        var calendar = Calendar.current
+        calendar.locale = Locale(identifier: "ja_JP")
+        return calendar
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: compact ? 7 : 5) {
-            header
+        VStack(alignment: .leading, spacing: 5) {
             if let first = entry.assignments.first {
                 if compact {
-                    nextDeadline(first)
+                    nextAssignment(first)
                 } else {
-                    deadlineList(Array(entry.assignments.prefix(3)))
+                    assignmentList(Array(entry.assignments.prefix(3)))
                 }
             } else {
-                emptyState
+                Text(emptyMessage)
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(maxHeight: .infinity, alignment: .center)
             }
             if let snapshot = entry.snapshot {
                 Spacer(minLength: 0)
@@ -134,140 +129,74 @@ struct WidgetCard: View {
             }
         }
         .padding(.horizontal, compact ? 13 : 15)
-        .padding(.vertical, 11)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(compact ? "次の締切" : "提出予定")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-            if let first = entry.assignments.first {
-                if compact {
-                    Text(first.isQuiz == true ? "小テスト" : "課題")
-                        .foregroundStyle(kindColor(for: first))
-                } else {
-                    Text("未提出 \(entry.assignments.count)件")
-                        .monospacedDigit()
-                        .foregroundStyle(blue)
-                }
-            }
-        }
-        .font(.system(size: 10, weight: .semibold))
-        .lineLimit(1)
-        .accessibilityAddTraits(.isHeader)
-    }
-
-    private func nextDeadline(_ assignment: Assignment) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                if assignment.hasDeadline {
-                    Text(assignment.due, format: dayFormat)
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    Text(assignment.due, format: timeFormat)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
-                } else {
-                    Text("締切なし").font(.system(size: 17, weight: .semibold))
-                }
-            }
-            .foregroundStyle(isUrgent(assignment) ? amber : .primary)
-            .monospacedDigit()
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-            .accessibilityElement(children: .combine)
-
-            Text(assignment.title)
-                .font(.system(size: 14, weight: .semibold))
+    private func nextAssignment(_ assignment: Assignment) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(courseName(assignment))
+                .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
-
-            HStack(spacing: 4) {
-                Image(systemName: symbol(for: assignment))
-                    .foregroundStyle(kindColor(for: assignment))
-                    .widgetAccentable()
-                    .accessibilityLabel(assignment.isQuiz == true ? "小テスト" : "課題")
-                Text(courseName(assignment)).foregroundStyle(.secondary).lineLimit(1)
-            }
-            .font(.system(size: 10, weight: .medium))
-        }
-    }
-
-    private func deadlineList(_ assignments: [Assignment]) -> some View {
-        VStack(spacing: 0) {
-            ForEach(assignments) { assignment in
-                if assignment.id != assignments.first?.id {
-                    Rectangle()
-                        .fill(.primary.opacity(0.11))
-                        .frame(height: 0.5)
-                        .padding(.leading, 26)
-                        .accessibilityHidden(true)
-                }
-                deadlineRow(assignment)
-            }
-        }
-    }
-
-    private func deadlineRow(_ assignment: Assignment) -> some View {
-        HStack(spacing: 7) {
-            let color = kindColor(for: assignment)
-            Image(systemName: symbol(for: assignment))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(color)
-                .frame(width: 20, height: 20)
-                .background(color.opacity(dark ? 0.14 : 0.12), in: RoundedRectangle(cornerRadius: 6))
-                .widgetAccentable()
-                .accessibilityLabel(assignment.isQuiz == true ? "小テスト" : "課題")
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text(assignment.title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
-                Text(courseName(assignment)).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            if assignment.hasDeadline {
-                VStack(alignment: .trailing, spacing: 0) {
-                    Text(assignment.due, format: timeFormat)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundStyle(isUrgent(assignment) ? amber : .primary)
-                    Text(assignment.due, format: dayFormat)
-                        .font(.system(size: 9, weight: .medium, design: .rounded))
-                        .foregroundStyle(.secondary)
-                }
+            Text(title(assignment))
+                .font(.system(size: 14))
+                .lineLimit(2)
+            Spacer(minLength: 3)
+            deadline(assignment)
+                .font(.system(size: 14, weight: .semibold))
                 .monospacedDigit()
-                .fixedSize(horizontal: true, vertical: false)
-            } else {
-                Text("締切なし").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
-            }
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .multilineTextAlignment(.leading)
         }
-        .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
     }
 
-    private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Image(systemName: emptyIcon)
-                .font(.system(size: 19, weight: .medium))
-                .foregroundStyle(blue)
-                .accessibilityHidden(true)
-            Text(emptyMessage)
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(3)
-        }
-        .frame(maxHeight: .infinity, alignment: .center)
-    }
+    private func assignmentList(_ assignments: [Assignment]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(assignments) { assignment in
+                if assignment.id != assignments.first?.id {
+                    Divider()
+                }
+                HStack(alignment: .center, spacing: 7) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(courseName(assignment))
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(title(assignment))
+                            .font(.system(size: 11))
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.9)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-    private var emptyIcon: String {
-        switch entry.status {
-        case .signedOut, .reconnect: "link"
-        case .delayed: "arrow.clockwise"
-        case .ready:
-            if let snapshot = entry.snapshot, (snapshot.failedCourseCount ?? 0) == 0 {
-                "checkmark.circle"
-            } else {
-                "clock"
+                    deadline(assignment)
+                        .font(.system(size: 11, weight: .semibold))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 89, alignment: .trailing)
+                }
+                .padding(.vertical, 3)
+                .accessibilityElement(children: .combine)
             }
         }
+    }
+
+    private func deadline(_ assignment: Assignment) -> Text {
+        guard assignment.hasDeadline else { return Text("締切なし").foregroundColor(.secondary) }
+        let remaining = assignment.due.timeIntervalSince(entry.date)
+        if remaining <= 0 { return Text("締切超過").foregroundColor(.red) }
+        if remaining < 60 { return Text("あと1分未満") }
+
+        if #available(iOS 18.0, macOS 15.0, *) {
+            let format = SystemFormatStyle.DateOffset(
+                to: assignment.due, allowedFields: [.day, .hour, .minute], maxFieldCount: 2, sign: .never
+            ).calendar(displayCalendar)
+            return Text("あと\(TimeDataSource<Date>.currentDate, format: format)")
+        }
+        return Text("あと\(durationText(remaining))")
     }
 
     private var emptyMessage: String {
@@ -277,7 +206,7 @@ struct WidgetCard: View {
         case .delayed: "更新できませんでした"
         case .ready:
             if let snapshot = entry.snapshot {
-                (snapshot.failedCourseCount ?? 0) > 0 ? "一部の講義を取得できません" : "未提出の項目はありません"
+                (snapshot.failedCourseCount ?? 0) > 0 ? "一部の講義を取得できません" : "未提出の課題・小テストはありません"
             } else {
                 "課題・小テストを取得中"
             }
@@ -285,28 +214,44 @@ struct WidgetCard: View {
     }
 
     private func syncStatus(_ snapshot: Snapshot) -> some View {
-        let partial = (snapshot.failedCourseCount ?? 0) > 0
-        let status: (label: String, symbol: String)
+        let label: String
         switch entry.status {
-        case .reconnect: status = ("要再接続", "link")
-        case .delayed: status = ("前回同期", "clock")
-        case .ready, .signedOut:
-            status = partial ? ("一部同期", "exclamationmark.circle") : ("同期", "arrow.clockwise")
+        case .reconnect: label = "要再接続"
+        case .delayed: label = "前回同期"
+        case .ready, .signedOut: label = (snapshot.failedCourseCount ?? 0) > 0 ? "一部同期" : "同期"
+        }
+        let elapsed: Text
+        if #available(iOS 18.0, macOS 15.0, *) {
+            let format = SystemFormatStyle.DateReference(
+                to: snapshot.syncedAt, allowedFields: [.minute, .hour, .day], thresholdField: .day
+            ).calendar(displayCalendar)
+            elapsed = Text(.currentDate, format: format)
+        } else {
+            let age = entry.date.timeIntervalSince(snapshot.syncedAt)
+            elapsed = age < 60 ? Text("たった今") : Text("\(durationText(age))前")
         }
 
-        return HStack(spacing: 4) {
-            Image(systemName: status.symbol).accessibilityHidden(true)
-            Text(status.label)
-            if !Calendar.current.isDate(snapshot.syncedAt, inSameDayAs: entry.date) {
-                Text(snapshot.syncedAt, format: dayFormat)
-            }
-            Text(snapshot.syncedAt, format: timeFormat).monospacedDigit()
-        }
-        .font(.system(size: 9, weight: .medium))
-        .foregroundStyle(entry.status == .reconnect ? amber : .secondary)
-        .lineLimit(1)
-        .minimumScaleFactor(0.8)
-        .accessibilityElement(children: .combine)
+        return Text("\(label) \(elapsed)")
+            .font(.system(size: 10))
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .multilineTextAlignment(.leading)
+    }
+
+    private func durationText(_ duration: TimeInterval) -> String {
+        let minutes = Int(max(0, duration) / 60)
+        let hours = minutes / 60
+        let days = hours / 24
+        if days > 0 { return "\(days)日\(hours % 24)時間" }
+        if hours > 0 { return "\(hours)時間\(minutes % 60)分" }
+        return "\(minutes)分"
+    }
+
+    private func title(_ assignment: Assignment) -> String {
+        assignment.isQuiz == true ? "小テスト · \(assignment.title)" : assignment.title
     }
 
     private func courseName(_ assignment: Assignment) -> String {
@@ -315,16 +260,6 @@ struct WidgetCard: View {
             return assignment.course
         }
         return String(assignment.course[..<range.lowerBound])
-    }
-
-    private func symbol(for assignment: Assignment) -> String {
-        assignment.isQuiz == true ? "questionmark.circle" : "doc.text"
-    }
-
-    private func kindColor(for assignment: Assignment) -> Color { assignment.isQuiz == true ? amber : blue }
-
-    private func isUrgent(_ assignment: Assignment) -> Bool {
-        assignment.hasDeadline && assignment.due.timeIntervalSince(entry.date) <= 24 * 3600
     }
 }
 
