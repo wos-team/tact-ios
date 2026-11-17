@@ -107,7 +107,7 @@ struct AssignmentProvider: TimelineProvider {
             [$0.due.addingTimeInterval(-urgentDeadlineInterval), $0.due.addingTimeInterval(-60), $0.due, $0.closes]
         }.filter { entry.date < $0 && $0 < nextSync })
         if midnight <= nextSync { displayDates.insert(midnight) }
-        if family == .systemMedium, let timetable = entry.snapshot?.timetable {
+        if family != .systemSmall, let timetable = entry.snapshot?.timetable {
             // Keep the end-of-class change available even if WidgetKit delays the next sync.
             let today = TimetableDay(classes: timetable, at: entry.date)
             displayDates.formUnion(today.changeDates.filter { $0 > entry.date })
@@ -267,24 +267,35 @@ struct WidgetCard: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
-                let assignments = Array(entry.assignments.prefix(extraLarge || tall ? 6 : 3))
+                let assignments = Array(entry.assignments.prefix(extraLarge ? 6 : tall ? 4 : 3))
                 if extraLarge && assignments.count > 1 {
                     let columnCount = (assignments.count + 1) / 2
                     HStack(alignment: .top, spacing: 14) {
-                        summaryRows(Array(assignments.prefix(columnCount)))
+                        summaryRows(Array(assignments.prefix(columnCount)), lineLimit: 1)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         Rectangle()
                             .fill(.secondary.opacity(0.25))
                             .frame(width: 1)
                             .accessibilityHidden(true)
-                        summaryRows(Array(assignments.dropFirst(columnCount)))
+                        summaryRows(Array(assignments.dropFirst(columnCount)), lineLimit: 1)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else {
-                    summaryRows(assignments, lineLimit: tall && assignments.count > 4 ? 1 : nil)
+                    summaryRows(assignments, lineLimit: assignments.count >= 3 ? 1 : assignments.count == 2 ? 2 : 5)
                 }
                 Spacer(minLength: 0)
             }
+
+            Divider()
+            VStack(alignment: .leading, spacing: 5) {
+                Label("\(AcademicDay(on: entry.date).weekdayLabel)曜の時間割", systemImage: "calendar")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(colorScheme == .dark ? Color.cyan : Color.indigo)
+                    .accessibilityAddTraits(.isHeader)
+                TimetableWidget(timetable: entry.snapshot?.timetable, rooms: entry.rooms, date: entry.date)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(1)
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
