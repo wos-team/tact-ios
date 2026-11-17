@@ -37,7 +37,7 @@ struct AssignmentProvider: TimelineProvider {
         let now = Date()
         let examples = [
             Assignment(id: "example-1", title: "第6回 演習課題", course: "知能システム制御",
-                       due: now.addingTimeInterval(6 * 3600), closes: now.addingTimeInterval(6 * 3600), submitted: false),
+                       due: now.addingTimeInterval(2 * 3600), closes: now.addingTimeInterval(2 * 3600), submitted: false),
             Assignment(id: "example-2", title: "第7回 確認テスト", course: "オペレーティング・システム",
                        due: now.addingTimeInterval(36 * 3600), closes: now.addingTimeInterval(36 * 3600), submitted: false, isQuiz: true),
             Assignment(id: "example-3", title: "構文解析レポート", course: "コンパイラ",
@@ -62,6 +62,11 @@ struct AssignmentProvider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<AssignmentEntry>) -> Void) {
+        if context.family.isExtraLargePortrait {
+            completion(makeTimeline(from: cachedEntry(), family: context.family))
+            Task { @MainActor in _ = await WidgetBackgroundSync.shared.entry() }
+            return
+        }
         Task { @MainActor in
             var delivered = false
             let fallback = Task { @MainActor in
@@ -152,8 +157,17 @@ struct AssignmentWidgetView: View {
 private enum WidgetPalette {
     static func background(_ scheme: ColorScheme) -> Color {
         scheme == .dark
-            ? Color(red: 0.131, green: 0.134, blue: 0.127)
-            : Color(red: 0.973, green: 0.969, blue: 0.950)
+            ? Color(red: 0.085, green: 0.115, blue: 0.18)
+            : Color(red: 0.966, green: 0.975, blue: 0.998)
+    }
+
+    static func category(_ assignment: Assignment, _ scheme: ColorScheme) -> Color {
+        if assignment.isQuiz == true {
+            return scheme == .dark ? Color(red: 0.84, green: 0.73, blue: 1)
+                : Color(red: 0.40, green: 0.22, blue: 0.66)
+        }
+        return scheme == .dark ? Color(red: 0.58, green: 0.80, blue: 1)
+            : Color(red: 0.12, green: 0.34, blue: 0.69)
     }
 
     static func urgent(_ scheme: ColorScheme) -> Color {
@@ -202,7 +216,7 @@ struct WidgetCard: View {
                 Divider()
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
-                        Text("\(AcademicDay(on: entry.date).weekdayLabel)曜の時間割")
+                        Label("\(AcademicDay(on: entry.date).weekdayLabel)曜の時間割", systemImage: "calendar")
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(.secondary)
                             .fixedSize()
@@ -231,8 +245,9 @@ struct WidgetCard: View {
     private var summaryCard: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("締切の近い課題")
-                    .font(.system(size: 17, weight: .semibold))
+                Label("締切の近い課題", systemImage: "checklist")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(colorScheme == .dark ? Color.cyan : Color.indigo)
                     .accessibilityAddTraits(.isHeader)
                     .fixedSize()
                 Spacer(minLength: 0)
@@ -241,10 +256,16 @@ struct WidgetCard: View {
             Divider()
 
             if entry.assignments.isEmpty {
-                Text(emptyMessage)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                VStack(spacing: 8) {
+                    Image(systemName: entry.snapshot == nil ? "arrow.trianglehead.clockwise" : "tray")
+                        .font(.title2)
+                        .foregroundStyle(colorScheme == .dark ? Color.cyan : Color.indigo)
+                        .accessibilityHidden(true)
+                    Text(emptyMessage)
+                        .font(.subheadline.weight(.medium))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
                 let assignments = Array(entry.assignments.prefix(extraLarge || tall ? 6 : 3))
                 if extraLarge && assignments.count > 1 {
@@ -273,7 +294,6 @@ struct WidgetCard: View {
         let lines = lineLimit ?? (assignments.count == 1 ? 8 : assignments.count == 2 ? 4 : 2)
         return VStack(alignment: .leading, spacing: 6) {
             ForEach(assignments) { assignment in
-                if assignment.id != assignments.first?.id { Divider() }
                 summaryRow(assignment, lines: lines)
             }
         }
@@ -281,11 +301,12 @@ struct WidgetCard: View {
 
     private func summaryRow(_ assignment: Assignment, lines: Int) -> some View {
         let preview = entry.summaries[assignment.id]
+        let tint = WidgetPalette.category(assignment, colorScheme)
         return VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(assignment.displayCourse)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WidgetPalette.category(assignment, colorScheme))
                     .lineLimit(1)
                 Spacer(minLength: 0)
                 deadline(assignment)
@@ -315,6 +336,12 @@ struct WidgetCard: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .padding(.horizontal, 9)
+        .padding(.vertical, tall ? 4 : 6)
+        .background(tint.opacity(colorScheme == .dark ? 0.11 : 0.07), in: RoundedRectangle(cornerRadius: 7))
+        .overlay(alignment: .leading) {
+            Capsule().fill(tint).frame(width: 2).padding(.vertical, 6).accessibilityHidden(true)
+        }
         .foregroundStyle(.primary)
         .accessibilityElement(children: .combine)
     }
@@ -324,7 +351,7 @@ struct WidgetCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(assignment.displayCourse)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WidgetPalette.category(assignment, colorScheme))
                     .lineLimit(2)
                 Text(title(assignment))
                     .font(.system(size: 17, weight: .semibold))
@@ -361,6 +388,7 @@ struct WidgetCard: View {
 
                         Text(title(assignment))
                             .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(WidgetPalette.category(assignment, colorScheme))
                             .minimumScaleFactor(0.86)
                             .frame(width: columnWidth, alignment: .leading)
 
@@ -383,11 +411,12 @@ struct WidgetCard: View {
     private func deadline(_ assignment: Assignment) -> Text {
         guard assignment.hasDeadline else { return Text("締切なし").foregroundColor(.secondary) }
         let remaining = assignment.due.timeIntervalSince(entry.date)
-        let color = remaining <= urgentDeadlineInterval ? WidgetPalette.urgent(colorScheme) : Color.primary
+        let color = remaining <= urgentDeadlineInterval ? WidgetPalette.urgent(colorScheme)
+            : WidgetPalette.category(assignment, colorScheme)
         if remaining <= 0 { return Text("締切超過").foregroundColor(color) }
         if remaining < 60 { return Text("あと1分未満").foregroundColor(color) }
 
-        if #available(iOS 18.0, macOS 15.0, *), !large, !extraLarge {
+        if #available(iOS 18.0, macOS 15.0, *), !large, !extraLarge, !tall {
             let format = SystemFormatStyle.DateOffset(
                 to: assignment.due, allowedFields: [.day, .hour, .minute], maxFieldCount: 2, sign: .never
             ).calendar(displayCalendar)
@@ -420,7 +449,7 @@ struct WidgetCard: View {
         case .ready, .signedOut: label = (snapshot.failedCourseCount ?? 0) > 0 ? "一部同期" : "同期"
         }
         let elapsed: Text
-        if #available(iOS 18.0, macOS 15.0, *), !large, !extraLarge {
+        if #available(iOS 18.0, macOS 15.0, *), !large, !extraLarge, !tall {
             let format = SystemFormatStyle.DateReference(
                 to: snapshot.syncedAt, allowedFields: [.minute, .hour, .day], thresholdField: .day
             ).calendar(displayCalendar)
