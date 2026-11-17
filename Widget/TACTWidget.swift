@@ -281,7 +281,7 @@ struct WidgetCard: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else {
-                    summaryRows(assignments, lineLimit: assignments.count >= 3 ? 1 : assignments.count == 2 ? 2 : 5)
+                    summaryRows(assignments, lineLimit: assignments.count >= 3 ? 1 : assignments.count == 2 ? 1 : 3)
                 }
                 Spacer(minLength: 0)
             }
@@ -289,10 +289,10 @@ struct WidgetCard: View {
             Divider()
             VStack(alignment: .leading, spacing: 5) {
                 Label("\(AcademicDay(on: entry.date).weekdayLabel)曜の時間割", systemImage: "calendar")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(colorScheme == .dark ? Color.cyan : Color.indigo)
                     .accessibilityAddTraits(.isHeader)
-                TimetableWidget(timetable: entry.snapshot?.timetable, rooms: entry.rooms, date: entry.date)
+                TimetableWidget(timetable: entry.snapshot?.timetable, rooms: entry.rooms, date: entry.date, expanded: true)
             }
             .fixedSize(horizontal: false, vertical: true)
             .layoutPriority(1)
@@ -348,7 +348,7 @@ struct WidgetCard: View {
             }
         }
         .padding(.horizontal, 9)
-        .padding(.vertical, tall ? 4 : 6)
+        .padding(.vertical, large ? 2 : 4)
         .background(tint.opacity(colorScheme == .dark ? 0.11 : 0.07), in: RoundedRectangle(cornerRadius: 7))
         .overlay(alignment: .leading) {
             Capsule().fill(tint).frame(width: 2).padding(.vertical, 6).accessibilityHidden(true)

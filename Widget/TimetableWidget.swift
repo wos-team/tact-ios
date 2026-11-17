@@ -5,6 +5,7 @@ struct TimetableWidget: View {
     let timetable: [TimetableClass]?
     let rooms: [String: String]
     let date: Date
+    var expanded = false
 
     var body: some View {
         let weekday = AcademicDay(on: date).weekday
@@ -14,11 +15,11 @@ struct TimetableWidget: View {
         VStack(alignment: .leading, spacing: 3) {
             if timetable?.isEmpty != false {
                 Text(timetable == nil ? "TACTとの同期後に表示" : "曜日・時限を確認できる授業なし")
-                    .font(.system(size: 10))
+                    .font(.system(size: expanded ? 13 : 10))
                     .foregroundStyle(.secondary)
             } else if occupied.isEmpty {
                 Text("授業なし")
-                    .font(.system(size: 10))
+                    .font(.system(size: expanded ? 13 : 10))
                     .foregroundStyle(.secondary)
             } else {
                 HStack(alignment: .top, spacing: 4) {
@@ -34,28 +35,29 @@ struct TimetableWidget: View {
 
     private func periodView(_ slot: TimetableSlot, lessons: [TimetableClass], isActive: Bool) -> some View {
         let period = slot.period
-        return VStack(spacing: 1) {
+        return VStack(spacing: expanded ? 5 : 1) {
             Text(lessons.count > 1 ? "\(period)限 +\(lessons.count - 1)" : "\(period)限")
-                .font(.system(size: 8, weight: .medium))
+                .font(.system(size: expanded ? 11 : 8, weight: .medium))
                 .foregroundStyle(.secondary)
             if let first = lessons.first {
                 Text(first.name)
-                    .font(.system(size: 9, weight: .semibold))
-                    .lineLimit(2, reservesSpace: true)
+                    .font(.system(size: expanded ? 13 : 9, weight: .semibold))
+                    .lineLimit(expanded ? 3 : 2, reservesSpace: true)
                     .minimumScaleFactor(0.85)
                     .multilineTextAlignment(.center)
                 Text(TimetableRooms.room(in: rooms, courseID: first.id, slot: slot) ?? "—")
-                    .font(.system(size: 8))
+                    .font(.system(size: expanded ? 12 : 8))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             } else {
                 Text("—")
-                    .font(.system(size: 9))
+                    .font(.system(size: expanded ? 13 : 9))
                     .foregroundStyle(.tertiary)
                     .accessibilityLabel("授業なし")
             }
         }
+        .padding(.vertical, expanded ? 6 : 0)
         .frame(maxWidth: .infinity, alignment: .top)
         .background(isActive ? Color.blue.opacity(colorScheme == .dark ? 0.14 : 0.08) : Color.clear,
                     in: RoundedRectangle(cornerRadius: 4))
