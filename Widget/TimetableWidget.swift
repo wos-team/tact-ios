@@ -7,6 +7,7 @@ struct TimetableWidget: View {
     let date: Date
 
     var body: some View {
+        let weekday = AcademicDay(on: date).weekday
         let today = TimetableDay(classes: timetable ?? [], at: date)
         let occupied = today.lessonsByPeriod.keys
         let periods = occupied.contains(where: { $0 > 5 }) ? occupied.sorted() : Array(1...5)
@@ -22,7 +23,8 @@ struct TimetableWidget: View {
             } else {
                 HStack(alignment: .top, spacing: 4) {
                     ForEach(periods, id: \.self) { period in
-                        periodView(period, lessons: today.lessonsByPeriod[period] ?? [],
+                        periodView(TimetableSlot(weekday: weekday, period: period),
+                                   lessons: today.lessonsByPeriod[period] ?? [],
                                    isActive: today.activePeriod == period)
                     }
                 }
@@ -30,8 +32,9 @@ struct TimetableWidget: View {
         }
     }
 
-    private func periodView(_ period: Int, lessons: [TimetableClass], isActive: Bool) -> some View {
-        VStack(spacing: 1) {
+    private func periodView(_ slot: TimetableSlot, lessons: [TimetableClass], isActive: Bool) -> some View {
+        let period = slot.period
+        return VStack(spacing: 1) {
             Text(lessons.count > 1 ? "\(period)限 +\(lessons.count - 1)" : "\(period)限")
                 .font(.system(size: 8, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -41,7 +44,7 @@ struct TimetableWidget: View {
                     .lineLimit(2, reservesSpace: true)
                     .minimumScaleFactor(0.85)
                     .multilineTextAlignment(.center)
-                Text(rooms[first.id] ?? "—")
+                Text(TimetableRooms.room(in: rooms, courseID: first.id, slot: slot) ?? "—")
                     .font(.system(size: 8))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

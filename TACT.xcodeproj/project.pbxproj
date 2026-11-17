@@ -11,6 +11,7 @@
 		31B0F433A5B897F06892EECA /* Timetable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833A545E2DB52B784E77117B /* Timetable.swift */; };
 		33215FAC218C78605D4110F4 /* TACTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D696B9D5F5063A422441837 /* TACTClient.swift */; };
 		61C1E0870432D8E6D44A50A2 /* Timetable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 833A545E2DB52B784E77117B /* Timetable.swift */; };
+		685AB3BCB995F08D5DAB63BC /* TimetableScreenshotReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF84A0E5BC9E3BA99E00AB74 /* TimetableScreenshotReader.swift */; };
 		83073E9194E82E055275C3D8 /* Assignments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C44F0637A921AC8EB8CE03F /* Assignments.swift */; };
 		8DE04D44C9EBADAE62E72FA2 /* TACTWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD088B27211C0FAA716DF176 /* TACTWidget.swift */; };
 		A731B2AA9FDD256AFC99E298 /* TACTWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 53E64664148684C1EADFCCD0 /* TACTWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -58,6 +59,7 @@
 		A7CEA418DD9F4A2A2D8C401B /* TACTApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TACTApp.swift; sourceTree = "<group>"; };
 		BA594F8EAAE593F35F029F1C /* TACT.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TACT.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FD088B27211C0FAA716DF176 /* TACTWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TACTWidget.swift; sourceTree = "<group>"; };
+		FF84A0E5BC9E3BA99E00AB74 /* TimetableScreenshotReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimetableScreenshotReader.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -96,6 +98,7 @@
 				0EA8DF8A47A39B1A4612B8E0 /* SignInView.swift */,
 				A7CEA418DD9F4A2A2D8C401B /* TACTApp.swift */,
 				842878AEFEB2F50ED47649D0 /* TimetableEditor.swift */,
+				FF84A0E5BC9E3BA99E00AB74 /* TimetableScreenshotReader.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -191,6 +194,7 @@
 				33215FAC218C78605D4110F4 /* TACTClient.swift in Sources */,
 				61C1E0870432D8E6D44A50A2 /* Timetable.swift in Sources */,
 				E00C353643365F5A1C6CFE1B /* TimetableEditor.swift in Sources */,
+				685AB3BCB995F08D5DAB63BC /* TimetableScreenshotReader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

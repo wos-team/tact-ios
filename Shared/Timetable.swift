@@ -3,6 +3,8 @@ import Foundation
 struct TimetableSlot: Hashable, Codable {
     let weekday: Int
     let period: Int
+
+    var label: String { "\(["日", "月", "火", "水", "木", "金", "土"][weekday - 1])曜\(period)限" }
 }
 
 struct TimetableClass: Identifiable, Codable {
@@ -157,6 +159,14 @@ struct TimetableDay {
 }
 
 enum TimetableRooms {
+    static func key(for courseID: String, slot: TimetableSlot) -> String {
+        "slot/\(slot.weekday)/\(slot.period)/\(courseID)"
+    }
+
+    static func room(in rooms: [String: String], courseID: String, slot: TimetableSlot) -> String? {
+        rooms[key(for: courseID, slot: slot)] ?? rooms[courseID]
+    }
+
     static var values: [String: String] {
         UserDefaults(suiteName: TACTStore.group)?.dictionary(forKey: "timetableRoomsBySite") as? [String: String] ?? [:]
     }

@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import WidgetKit
 
@@ -17,6 +18,8 @@ struct AssignmentsView: View {
     @State private var syncing = false
     @State private var showsSignIn = false
     @State private var showsTimetable = false
+    @State private var importPhoto: PhotosPickerItem?
+    @AppStorage("finishedTimetableRoomSetup") private var finishedTimetableRoomSetup = false
     @State private var errorMessage: String?
     @State private var lastWidgetAttempt: WidgetSyncAttempt?
 
@@ -74,6 +77,20 @@ struct AssignmentsView: View {
                     }
                 }
 
+                if connected, !finishedTimetableRoomSetup,
+                   snapshot?.timetable?.contains(where: AcademicDay(on: .now).isCurrentTerm) == true {
+                    Section {
+                        PhotosPicker(selection: $importPhoto, matching: .images) {
+                            Label("スクリーンショットを選ぶ", systemImage: "photo")
+                        }
+                        Button("あとで", role: .cancel) { finishedTimetableRoomSetup = true }
+                    } header: {
+                        Text("TACT連携完了")
+                    } footer: {
+                        Text("「すごい時間割」を使っている方は、時間割のスクリーンショットから教室をまとめて登録できます。")
+                    }
+                }
+
                 if let snapshot {
                     Section("未提出の課題・小テスト") {
                         let assignments = snapshot.upcoming(at: .now)
@@ -117,7 +134,14 @@ struct AssignmentsView: View {
                 await sync(force: false)
             }
         }
-        .sheet(isPresented: $showsTimetable) { TimetableEditor(timetable: snapshot?.timetable) }
+        .onChange(of: importPhoto) { _, selected in
+            if selected != nil { showsTimetable = true }
+        }
+        .sheet(isPresented: $showsTimetable, onDismiss: { importPhoto = nil }) {
+            TimetableEditor(timetable: snapshot?.timetable, photo: importPhoto) {
+                finishedTimetableRoomSetup = true
+            }
+        }
         .sheet(isPresented: $showsSignIn) {
             NavigationStack {
                 SignInView { cookies in
