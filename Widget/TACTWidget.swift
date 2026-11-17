@@ -122,10 +122,9 @@ struct WidgetCard: View {
             } else {
                 Text(emptyMessage)
                     .font(.system(size: 14, weight: .medium))
-                    .frame(maxHeight: .infinity, alignment: .center)
+                    .frame(maxHeight: compact ? .infinity : nil, alignment: .center)
             }
             if !compact {
-                Spacer(minLength: 0)
                 Divider()
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
@@ -184,28 +183,33 @@ struct WidgetCard: View {
                 if assignment.id != assignments.first?.id {
                     Divider()
                 }
-                HStack(alignment: .center, spacing: 7) {
-                    VStack(alignment: .leading, spacing: 0) {
+                GeometryReader { geometry in
+                    let spacing: CGFloat = 6
+                    let columnWidth = max(0, (geometry.size.width - 2 * spacing) / 3)
+
+                    HStack(spacing: spacing) {
                         Text(courseName(assignment))
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.secondary)
-                            .frame(height: 11)
+                            .minimumScaleFactor(0.84)
+                            .frame(width: columnWidth, alignment: .leading)
+
                         Text(title(assignment))
-                            .font(.system(size: 11, weight: .semibold))
-                            .frame(height: 12)
+                            .font(.system(size: 14, weight: .semibold))
+                            .minimumScaleFactor(0.86)
+                            .frame(width: columnWidth, alignment: .leading)
+
+                        deadline(assignment)
+                            .font(.system(size: 13, weight: .medium))
+                            .monospacedDigit()
+                            .minimumScaleFactor(0.82)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: columnWidth, alignment: .trailing)
                     }
                     .lineLimit(1)
-                    .minimumScaleFactor(0.9)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    deadline(assignment)
-                        .font(.system(size: 12, weight: .medium))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 88, alignment: .trailing)
+                    .frame(height: geometry.size.height)
                 }
+                .frame(height: 24)
                 .accessibilityElement(children: .combine)
             }
         }
@@ -285,7 +289,7 @@ struct WidgetCard: View {
     }
 
     private func courseName(_ assignment: Assignment) -> String {
-        let suffix = #/\s*[（(]\s*[0-9]{4}年度?[^）)]*[）)]\s*$/#
+        let suffix = #/\s*[（(]\s*[0-9０-９]{4}年度?[^）)]*[）)](?:\s*[（(]\s*旧\s*[:：][^）)]*[）)])?\s*$/#
         guard let range = assignment.course.firstMatch(of: suffix)?.range, range.lowerBound != assignment.course.startIndex else {
             return assignment.course
         }
