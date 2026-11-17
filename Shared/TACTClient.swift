@@ -114,7 +114,13 @@ enum TACTStore {
     }
 }
 
-final class NoRedirects: NSObject, URLSessionTaskDelegate {
+final class TACTRedirects: NSObject, URLSessionTaskDelegate {
+    let cookies: [SessionCookie]
+
+    init(cookies: [SessionCookie]) {
+        self.cookies = cookies
+    }
+
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
@@ -122,7 +128,16 @@ final class NoRedirects: NSObject, URLSessionTaskDelegate {
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        completionHandler(nil)
+        guard let original = task.originalRequest?.url, let destination = request.url,
+              original.path.hasPrefix("/portal/tool/"), destination.scheme == "https",
+              destination.host == TACTClient.host, destination.port == nil || destination.port == 443,
+              original.pathComponents.prefix(4).elementsEqual(destination.pathComponents.prefix(4)) else {
+            completionHandler(nil)
+            return
+        }
+        var redirected = request
+        redirected.setValue(TACTClient.cookieHeader(cookies, path: destination.path), forHTTPHeaderField: "Cookie")
+        completionHandler(redirected)
     }
 }
 
@@ -142,7 +157,7 @@ enum TACTClient {
         configuration.httpShouldSetCookies = false
         configuration.timeoutIntervalForRequest = foreground ? 25 : 8
         configuration.timeoutIntervalForResource = foreground ? 35 : 12
-        let network = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
+        let network = URLSession(configuration: configuration, delegate: TACTRedirects(cookies: session.cookies), delegateQueue: nil)
         defer { network.finishTasksAndInvalidate() }
 
         return try await fetch(using: session, network: network, started: started)
@@ -163,52 +178,67 @@ enum TACTClient {
         var failedSites = Set<String>()
         var assignments: [Assignment] = []
         var firstFailure: TACTError?
+        var successfulRequests = 0
 
         for offset in stride(from: 0, to: sites.count, by: 4) {
             try Task.checkCancellation()
             let batch = sites[offset..<min(offset + 4, sites.count)]
-            try await withThrowingTaskGroup(of: (String, Result<AssignmentResponse, TACTError>).self) { group in
+            try await withThrowingTaskGroup(of: CourseSync.self) { group in
                 for site in batch {
                     group.addTask {
-                        let stage = "講義別の課題取得"
-                        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_~"))
-                        guard let slug = site.id.addingPercentEncoding(withAllowedCharacters: allowed) else {
-                            return (site.id, .failure(.requestFailed(stage)))
-                        }
-                        do {
+                        let slug = encodePathSegment(site.id)
+                        let assignments = try await attempt {
                             let response: AssignmentResponse = try await load(
-                                "/direct/assignment/site/\(slug).json?_limit=0", stage: stage, using: session, network: network
+                                "/direct/assignment/site/\(slug).json?_limit=0",
+                                stage: "講義別の課題取得", using: session, network: network
                             )
-                            return (site.id, .success(response))
-                        } catch TACTError.signInRequired {
-                            throw TACTError.signInRequired
-                        } catch let error as TACTError {
-                            return (site.id, .failure(error))
+                            return response.assignment_collection.compactMap { $0.assignment(courses: courses, at: started) }
                         }
+                        let quizzes = try await attempt {
+                            try await loadQuizzes(site: site, slug: slug, date: started, using: session, network: network)
+                        }
+                        return CourseSync(site: site, assignments: assignments, quizzes: quizzes)
                     }
                 }
-                for try await (id, result) in group {
-                    switch result {
-                    case .success(let response):
-                        assignments += response.assignment_collection.compactMap {
-                            $0.assignment(courses: courses, at: started)
+                for try await result in group {
+                    let previous = prior?.assignments.filter {
+                        $0.courseID.map { $0 == result.site.id } ?? ($0.course == result.site.title)
+                    } ?? []
+
+                    switch result.assignments {
+                    case .success(let entries):
+                        successfulRequests += 1
+                        assignments += entries
+                    case .failure(let error):
+                        failedSites.insert(result.site.id)
+                        if firstFailure == nil { firstFailure = error }
+                        assignments += previous.filter { $0.isQuiz != true }
+                    }
+
+                    switch result.quizzes {
+                    case .success(let sync):
+                        successfulRequests += 1
+                        if sync.submissionStatusUnavailable {
+                            failedSites.insert(result.site.id)
+                            let previouslySubmitted = Set(previous.filter { $0.isQuiz == true && $0.submitted }.map(\.id))
+                            assignments += sync.entries.map { entry in
+                                var entry = entry
+                                entry.submitted = entry.submitted || previouslySubmitted.contains(entry.id)
+                                return entry
+                            }
+                        } else {
+                            assignments += sync.entries
                         }
                     case .failure(let error):
-                        failedSites.insert(id)
+                        failedSites.insert(result.site.id)
                         if firstFailure == nil { firstFailure = error }
+                        assignments += previous.filter { $0.isQuiz == true }
                     }
                 }
             }
         }
 
-        if failedSites.count == sites.count, let firstFailure { throw firstFailure }
-        if let prior, !failedSites.isEmpty {
-            let failedNames = Set(failedSites.compactMap { courses[$0] })
-            assignments += prior.assignments.filter {
-                if let id = $0.courseID { return failedSites.contains(id) }
-                return failedNames.contains($0.course)
-            }
-        }
+        if successfulRequests == 0, let firstFailure { throw firstFailure }
         var seen = Set<String>()
         return Snapshot(
             sessionID: session.id,
@@ -218,18 +248,122 @@ enum TACTClient {
         )
     }
 
+    private struct CourseSync {
+        let site: SiteResponse.Site
+        let assignments: Result<[Assignment], TACTError>
+        let quizzes: Result<QuizSync, TACTError>
+    }
+
+    private struct QuizSync {
+        let entries: [Assignment]
+        let submissionStatusUnavailable: Bool
+    }
+
+    private static func attempt<Value>(_ operation: () async throws -> Value) async throws -> Result<Value, TACTError> {
+        do {
+            return .success(try await operation())
+        } catch TACTError.signInRequired {
+            throw TACTError.signInRequired
+        } catch let error as TACTError {
+            return .failure(error)
+        }
+    }
+
+    private static func loadQuizzes(
+        site: SiteResponse.Site, slug: String, date: Date, using session: TACTSession, network: URLSession
+    ) async throws -> QuizSync {
+        let response: QuizResponse = try await load(
+            "/direct/sam_pub/context/\(slug).json", stage: "小テスト一覧の取得", using: session, network: network
+        )
+        let candidates = response.sam_pub_collection.compactMap { quiz in
+            quiz.assignment(site: site, at: date).map { (quiz, $0) }
+        }
+        guard !candidates.isEmpty else { return QuizSync(entries: [], submissionStatusUnavailable: false) }
+
+        let verified = try await attempt {
+            try await quizSubmissions(site: site, slug: slug, using: session, network: network)
+        }
+        switch verified {
+        case .success(let submitted):
+            // Older TACT pages only expose the title for tests without feedback links.
+            let titleCounts = Dictionary(grouping: response.sam_pub_collection) {
+                SubmittedQuizzes.normalizedTitle($0.title)
+            }.mapValues(\.count)
+            let entries = candidates.map { quiz, task in
+                var entry = task
+                let title = SubmittedQuizzes.normalizedTitle(quiz.title)
+                entry.submitted = submitted.assessmentIDs.contains(quiz.assessmentID)
+                    || (titleCounts[title] == 1 && submitted.titles.contains(title))
+                return entry
+            }
+            let ambiguous = candidates.contains { quiz, _ in
+                let title = SubmittedQuizzes.normalizedTitle(quiz.title)
+                return !submitted.assessmentIDs.contains(quiz.assessmentID)
+                    && titleCounts[title, default: 0] > 1 && submitted.titles.contains(title)
+            }
+            return QuizSync(entries: entries, submissionStatusUnavailable: ambiguous)
+        case .failure:
+            return QuizSync(entries: candidates.map { $0.1 }, submissionStatusUnavailable: true)
+        }
+    }
+
+    private static func quizSubmissions(
+        site: SiteResponse.Site, slug: String, using session: TACTSession, network: URLSession
+    ) async throws -> SubmittedQuizzes {
+        let stage = "小テストの提出状態の確認"
+        var placement = site.sitePages?.compactMap(\.quizPlacement).first
+        if placement == nil {
+            let pages: [SiteResponse.Page] = try await load(
+                "/direct/site/\(slug)/pages.json", stage: stage, using: session, network: network
+            )
+            placement = pages.compactMap(\.quizPlacement).first
+        }
+        guard let placement, !placement.isEmpty else { throw TACTError.requestFailed(stage) }
+        let html = try await loadData(
+            "/portal/tool/\(encodePathSegment(placement))", stage: stage,
+            accept: "text/html", using: session, network: network
+        )
+        guard let submitted = SubmittedQuizzes(html: html) else { throw TACTError.requestFailed(stage) }
+        return submitted
+    }
+
+    private static func encodePathSegment(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_~"))
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+    }
+
+    static func cookieHeader(_ cookies: [SessionCookie], path: String) -> String? {
+        let applicable = cookies.filter { $0.applies(to: path) }
+        guard !applicable.isEmpty else { return nil }
+        return applicable.sorted { $0.path.count > $1.path.count }
+            .map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+    }
+
     private static func load<Value: Decodable>(
         _ path: String,
         stage: String,
         using session: TACTSession,
         network: URLSession
     ) async throws -> Value {
+        let data = try await loadData(path, stage: stage, accept: "application/json", using: session, network: network)
+        do {
+            return try JSONDecoder().decode(Value.self, from: data)
+        } catch {
+            throw TACTError.requestFailed(stage)
+        }
+    }
+
+    private static func loadData(
+        _ path: String, stage: String, accept: String, using session: TACTSession, network: URLSession
+    ) async throws -> Data {
         let url = URL(string: "https://\(host)\(path)")!
-        let cookies = session.cookies.filter { $0.applies(to: url.path) }
-        guard !cookies.isEmpty else { throw TACTError.signInRequired }
+        guard let cookie = cookieHeader(session.cookies, path: url.path) else {
+            if accept == "text/html" { throw TACTError.requestFailed(stage) }
+            throw TACTError.signInRequired
+        }
         var request = URLRequest(url: url)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue(cookies.map { "\($0.name)=\($0.value)" }.joined(separator: "; "), forHTTPHeaderField: "Cookie")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
+        request.setValue(cookie, forHTTPHeaderField: "Cookie")
         let data: Data
         let raw: URLResponse
         do {
@@ -250,10 +384,6 @@ enum TACTClient {
             throw TACTError.signInRequired
         }
         guard response.statusCode == 200 else { throw TACTError.requestFailed(stage) }
-        do {
-            return try JSONDecoder().decode(Value.self, from: data)
-        } catch {
-            throw TACTError.requestFailed(stage)
-        }
+        return data
     }
 }

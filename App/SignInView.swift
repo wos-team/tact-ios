@@ -37,9 +37,9 @@ struct SignInView: UIViewRepresentable {
                     // Only TACT-origin cookies are needed for the native API client.
                     cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
                         .caseInsensitiveCompare(TACTClient.host) == .orderedSame
-                }.map(SessionCookie.init).filter { $0.applies(to: "/direct/assignment/my.json") }
+                }.map(SessionCookie.init)
 
-                guard !tactCookies.isEmpty else { return }
+                guard tactCookies.contains(where: { $0.applies(to: "/direct/session/current.json") }) else { return }
                 self.completed = true
                 self.onConnected(tactCookies)
             }

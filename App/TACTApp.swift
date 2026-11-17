@@ -27,7 +27,7 @@ struct AssignmentsView: View {
                             Task { await sync(force: true) }
                         } label: {
                             if syncing {
-                                ProgressView("TACTから課題を取得中")
+                                ProgressView("TACTから課題・小テストを取得中")
                             } else {
                                 Label("今すぐ更新", systemImage: "arrow.clockwise")
                             }
@@ -60,20 +60,24 @@ struct AssignmentsView: View {
                 }
 
                 if let snapshot {
-                    Section("未提出の課題") {
+                    Section("未提出の課題・小テスト") {
                         let assignments = snapshot.upcoming(at: .now)
                         if assignments.isEmpty {
                             Text((snapshot.failedCourseCount ?? 0) > 0
-                                 ? "取得できた講義に表示できる未提出課題はありません。"
-                                 : "表示できる未提出課題はありません。")
+                                 ? "取得できた講義に表示できる未提出の課題・小テストはありません。"
+                                 : "表示できる未提出の課題・小テストはありません。")
                                 .foregroundStyle(.secondary)
                         }
                         ForEach(assignments) { assignment in
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(assignment.title).font(.headline)
-                                Text(assignment.course)
-                                Text(assignment.due, format: .dateTime.month().day().weekday().hour().minute())
-                                    .foregroundStyle(assignment.due < .now ? Color.orange : Color.secondary)
+                                Text(assignment.courseLabel)
+                                if assignment.hasDeadline {
+                                    Text(assignment.due, format: .dateTime.month().day().weekday().hour().minute())
+                                        .foregroundStyle(assignment.due < .now ? Color.orange : Color.secondary)
+                                } else {
+                                    Text("締切なし").foregroundStyle(.secondary)
+                                }
                             }
                             .padding(.vertical, 4)
                         }
@@ -82,7 +86,7 @@ struct AssignmentsView: View {
                     Link("TACTをブラウザで開く", destination: TACTClient.home)
                 }
             }
-            .navigationTitle("TACT 課題")
+            .navigationTitle("TACT 課題・小テスト")
             .refreshable { await sync(force: true) }
         }
         .task(id: scenePhase) {

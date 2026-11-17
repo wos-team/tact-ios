@@ -82,7 +82,7 @@ struct AssignmentWidgetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("未提出の課題", systemImage: "checklist")
+            Label("課題・小テスト", systemImage: "checklist")
                 .font(.caption.bold())
                 .foregroundStyle(.tint)
 
@@ -95,16 +95,16 @@ struct AssignmentWidgetView: View {
                 if family == .systemSmall {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(assignment.title).font(.subheadline.bold()).lineLimit(2)
-                        Text(assignment.course).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        Text(assignment.due, format: .dateTime.month().day().hour().minute())
+                        Text(assignment.courseLabel).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        deadline(for: assignment)
                             .font(.caption.bold())
                     }
                 } else {
                     HStack(spacing: 6) {
                         Text(assignment.title).fontWeight(.semibold).lineLimit(1)
-                        Text(assignment.course).foregroundStyle(.secondary).lineLimit(1)
+                        Text(assignment.courseLabel).foregroundStyle(.secondary).lineLimit(1)
                         Spacer(minLength: 0)
-                        Text(assignment.due, format: .dateTime.month().day().hour().minute())
+                        deadline(for: assignment)
                             .monospacedDigit()
                             .fixedSize()
                     }
@@ -124,17 +124,24 @@ struct AssignmentWidgetView: View {
         .containerBackground(.fill.tertiary, for: .widget)
     }
 
+    private func deadline(for assignment: Assignment) -> Text {
+        if assignment.hasDeadline {
+            return Text(assignment.due, format: .dateTime.month().day().hour().minute())
+        }
+        return Text("締切なし")
+    }
+
     private var emptyMessage: String {
         switch entry.status {
         case .signedOut: "アプリを開いてTACTに接続"
         case .ready:
             if let snapshot = entry.snapshot {
-                (snapshot.failedCourseCount ?? 0) > 0 ? "一部の講義を取得できません" : "未提出課題はありません"
+                (snapshot.failedCourseCount ?? 0) > 0 ? "一部の講義を取得できません" : "未提出の課題・小テストはありません"
             } else {
-                "課題を取得中"
+                "課題・小テストを取得中"
             }
         case .reconnect: "アプリを開いて再接続"
-        case .delayed: "課題を更新できません"
+        case .delayed: "課題・小テストを更新できません"
         }
     }
 
@@ -152,8 +159,8 @@ struct TACTWidget: Widget {
         StaticConfiguration(kind: "TACTAssignments", provider: AssignmentProvider()) { entry in
             AssignmentWidgetView(entry: entry)
         }
-        .configurationDisplayName("TACTの未提出課題")
-        .description("締切が近い未提出課題を表示します。")
+        .configurationDisplayName("TACTの課題・小テスト")
+        .description("締切が近い未提出の課題・小テストを表示します。")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
