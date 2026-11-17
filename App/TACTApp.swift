@@ -12,6 +12,7 @@ struct AssignmentsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var snapshot: Snapshot?
     @State private var connected = false
+    @State private var hasPendingSession = false
     @State private var needsReconnect = false
     @State private var syncing = false
     @State private var showsSignIn = false
@@ -21,12 +22,12 @@ struct AssignmentsView: View {
         NavigationStack {
             List {
                 Section {
-                    if connected {
+                    if connected || hasPendingSession {
                         Button {
                             Task { await sync(force: true) }
                         } label: {
                             if syncing {
-                                ProgressView()
+                                ProgressView("TACTから課題を取得中")
                             } else {
                                 Label("今すぐ更新", systemImage: "arrow.clockwise")
                             }
@@ -34,7 +35,7 @@ struct AssignmentsView: View {
                         .disabled(syncing)
                     }
 
-                    if !connected || needsReconnect {
+                    if (!connected && !hasPendingSession) || needsReconnect {
                         Button(connected ? "TACTに再接続" : "TACTに接続") {
                             showsSignIn = true
                         }
@@ -99,15 +100,18 @@ struct AssignmentsView: View {
         guard !syncing else { return }
 
         do {
-            guard let session = try TACTStore.session() else {
-                connected = false
+            let active = try TACTStore.session()
+            connected = active != nil
+            snapshot = active.flatMap { TACTStore.snapshot(for: $0.id) }
+            let pending = try TACTStore.session(pending: true)
+            hasPendingSession = pending != nil
+            if let pending {
+                await fetch(pending, newSession: true)
                 return
             }
-            connected = true
-            let saved = TACTStore.snapshot(for: session.id)
-            snapshot = saved
-            if !force, let saved, Date().timeIntervalSince(saved.syncedAt) < 5 * 60 { return }
-            await fetch(session)
+            guard let active else { return }
+            if !force, let snapshot, Date().timeIntervalSince(snapshot.syncedAt) < 5 * 60 { return }
+            await fetch(active)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -117,8 +121,16 @@ struct AssignmentsView: View {
     private func completeSignIn(_ cookies: [SessionCookie]) async {
         showsSignIn = false
         guard !syncing else { return }
-        let session = TACTSession(cookies: cookies)
-        await fetch(session, newSession: true)
+
+        do {
+            let session = TACTSession(cookies: cookies)
+            try TACTStore.save(session, pending: true)
+            hasPendingSession = true
+            needsReconnect = false
+            await fetch(session, newSession: true)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     @MainActor
@@ -127,7 +139,7 @@ struct AssignmentsView: View {
         defer { syncing = false }
 
         do {
-            let updated = try await TACTClient.fetch(using: session)
+            let updated = try await TACTClient.fetch(using: session, foreground: true)
             try Task.checkCancellation()
             try TACTStore.save(updated)
             if newSession {
@@ -138,7 +150,11 @@ struct AssignmentsView: View {
                     TACTStore.discardSnapshot(for: session.id)
                     throw error
                 }
-                if let previous { TACTStore.discardSnapshot(for: previous.id) }
+                try TACTStore.clearPendingSession()
+                hasPendingSession = false
+                if let previous, previous.id != session.id {
+                    TACTStore.discardSnapshot(for: previous.id)
+                }
             }
             connected = true
             snapshot = TACTStore.snapshot(for: session.id) ?? updated
@@ -148,7 +164,18 @@ struct AssignmentsView: View {
         } catch is CancellationError {
             return
         } catch {
-            if case TACTError.signInRequired = error { needsReconnect = true }
+            if case TACTError.signInRequired = error {
+                needsReconnect = true
+                if newSession {
+                    do {
+                        try TACTStore.clearPendingSession()
+                        hasPendingSession = false
+                    } catch {
+                        errorMessage = error.localizedDescription
+                        return
+                    }
+                }
+            }
             errorMessage = error.localizedDescription
         }
     }
