@@ -59,6 +59,11 @@ struct AssignmentProvider: TimelineProvider {
                 [$0.due.addingTimeInterval(-urgentDeadlineInterval), $0.due.addingTimeInterval(-60), $0.due, $0.closes]
             }.filter { entry.date < $0 && $0 < nextSync })
             if midnight <= nextSync { displayDates.insert(midnight) }
+            if context.family == .systemMedium, let timetable = entry.snapshot?.timetable {
+                // Keep the end-of-class change available even if WidgetKit delays the next sync.
+                let today = TimetableDay(classes: timetable, at: entry.date)
+                displayDates.formUnion(today.changeDates.filter { $0 > entry.date })
+            }
             if #unavailable(iOS 18.0, macOS 15.0), entry.snapshot != nil {
                 // Older iOS needs entries for text updates, independent of TACT requests.
                 let interval: TimeInterval = 5 * 60

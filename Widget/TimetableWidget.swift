@@ -1,14 +1,14 @@
 import SwiftUI
 
 struct TimetableWidget: View {
+    @Environment(\.colorScheme) private var colorScheme
     let timetable: [TimetableClass]?
     let rooms: [String: String]
     let date: Date
 
     var body: some View {
-        let day = AcademicDay(on: date)
-        let today = (timetable ?? []).filter(day.includes)
-        let occupied = Set(today.flatMap(\.slots).filter { $0.weekday == day.weekday }.map(\.period))
+        let today = TimetableDay(classes: timetable ?? [], at: date)
+        let occupied = today.lessonsByPeriod.keys
         let periods = occupied.contains(where: { $0 > 5 }) ? occupied.sorted() : Array(1...5)
         VStack(alignment: .leading, spacing: 3) {
             if timetable?.isEmpty != false {
@@ -22,15 +22,15 @@ struct TimetableWidget: View {
             } else {
                 HStack(alignment: .top, spacing: 4) {
                     ForEach(periods, id: \.self) { period in
-                        let slot = TimetableSlot(weekday: day.weekday, period: period)
-                        periodView(period, lessons: today.filter { $0.slots.contains(slot) })
+                        periodView(period, lessons: today.lessonsByPeriod[period] ?? [],
+                                   isActive: today.activePeriod == period)
                     }
                 }
             }
         }
     }
 
-    private func periodView(_ period: Int, lessons: [TimetableClass]) -> some View {
+    private func periodView(_ period: Int, lessons: [TimetableClass], isActive: Bool) -> some View {
         VStack(spacing: 1) {
             Text(lessons.count > 1 ? "\(period)限 +\(lessons.count - 1)" : "\(period)限")
                 .font(.system(size: 8, weight: .medium))
@@ -54,6 +54,9 @@ struct TimetableWidget: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .top)
+        .background(isActive ? Color.blue.opacity(colorScheme == .dark ? 0.14 : 0.08) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 4))
         .accessibilityElement(children: .combine)
+        .accessibilityValue(isActive ? "授業中" : "")
     }
 }

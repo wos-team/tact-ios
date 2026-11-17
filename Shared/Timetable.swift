@@ -112,6 +112,50 @@ struct AcademicDay {
     }
 }
 
+struct TimetableDay {
+    private static let periodTimes: [Range<Int>] = [
+        525..<615,   // 08:45–10:15
+        630..<720,   // 10:30–12:00
+        780..<870,   // 13:00–14:30
+        885..<975,   // 14:45–16:15
+        990..<1080   // 16:30–18:00
+    ]
+
+    let lessonsByPeriod: [Int: [TimetableClass]]
+    let activePeriod: Int?
+    let changeDates: [Date]
+
+    init(classes: [TimetableClass], at date: Date) {
+        let academicDay = AcademicDay(on: date)
+        var lessons: [Int: [TimetableClass]] = [:]
+        for lesson in classes where academicDay.includes(lesson) {
+            for slot in lesson.slots where slot.weekday == academicDay.weekday {
+                lessons[slot.period, default: []].append(lesson)
+            }
+        }
+        lessonsByPeriod = lessons
+
+        let calendar = AcademicDay.calendar
+        let weekday = calendar.component(.weekday, from: date)
+        guard (2...6).contains(weekday) else {
+            activePeriod = nil
+            changeDates = []
+            return
+        }
+
+        let startOfDay = calendar.startOfDay(for: date)
+        let occupiedPeriods = Self.periodTimes.enumerated().compactMap { index, time -> (Int, Range<Date>)? in
+            let period = index + 1
+            guard lessons[period] != nil else { return nil }
+            let start = startOfDay.addingTimeInterval(TimeInterval(time.lowerBound * 60))
+            let end = startOfDay.addingTimeInterval(TimeInterval(time.upperBound * 60))
+            return (period, start..<end)
+        }
+        activePeriod = occupiedPeriods.first { $0.1.contains(date) }?.0
+        changeDates = occupiedPeriods.flatMap { [$0.1.lowerBound, $0.1.upperBound] }
+    }
+}
+
 enum TimetableRooms {
     static var values: [String: String] {
         UserDefaults(suiteName: TACTStore.group)?.dictionary(forKey: "timetableRoomsBySite") as? [String: String] ?? [:]
