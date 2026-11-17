@@ -179,7 +179,7 @@ final class WidgetBackgroundSync {
         return session
     }
 
-    func entry(firstDayEnd: Date?) async -> AssignmentEntry {
+    func entry() async -> AssignmentEntry {
         let now = Date()
         do {
             guard let session = try TACTStore.session() else {
@@ -199,7 +199,7 @@ final class WidgetBackgroundSync {
 
             let previous = currentEntry(for: session, date: now)
             let lastAttempt = previous.lastAttemptAt ?? cached?.syncedAt ?? .distantPast
-            let due = WidgetSyncSchedule.nextAttempt(after: lastAttempt, at: now, firstDayEnd: firstDayEnd) <= now
+            let due = WidgetSyncSchedule.nextAttempt(after: lastAttempt) <= now
             if due, previous.status != .reconnect {
                 clearCookies()
                 _ = try WidgetSyncJob.begin(sessionID: session.id, at: now)

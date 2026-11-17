@@ -58,7 +58,6 @@ struct WidgetSyncAttempt: Codable {
 
 enum TACTStore {
     static let group = "group.jp.matsuokakoki.tact-ios"
-    private static let firstDayEndKey = "widgetFirstLaunchDayEnd"
     private static let widgetAttemptKey = "lastWidgetSyncAttempt"
 
     static var lastWidgetAttempt: WidgetSyncAttempt? {
@@ -70,18 +69,6 @@ enum TACTStore {
         let attempt = WidgetSyncAttempt(finishedAt: .now, result: result, sessionID: sessionID, outcome: outcome)
         guard let data = try? JSONEncoder().encode(attempt) else { return }
         UserDefaults(suiteName: group)?.set(data, forKey: widgetAttemptKey)
-    }
-
-    static var widgetFirstDayEnd: Date? {
-        UserDefaults(suiteName: group)?.object(forKey: firstDayEndKey) as? Date
-    }
-
-    static func recordFirstLaunch(at date: Date = .now, calendar: Calendar = .current) -> Bool {
-        guard let defaults = UserDefaults(suiteName: group),
-              defaults.object(forKey: firstDayEndKey) == nil,
-              let day = calendar.dateInterval(of: .day, for: date) else { return false }
-        defaults.set(day.end, forKey: firstDayEndKey)
-        return true
     }
 
     private static let baseKey: [String: Any] = [
@@ -151,12 +138,8 @@ enum TACTStore {
 }
 
 enum WidgetSyncSchedule {
-    static func nextAttempt(after lastAttempt: Date, at now: Date, firstDayEnd: Date?) -> Date {
-        let firstDayAttempt = lastAttempt.addingTimeInterval(10 * 60)
-        if let firstDayEnd, max(now, firstDayAttempt) < firstDayEnd {
-            return firstDayAttempt
-        }
-        return lastAttempt.addingTimeInterval(60 * 60)
+    static func nextAttempt(after lastAttempt: Date) -> Date {
+        lastAttempt.addingTimeInterval(20 * 60)
     }
 }
 

@@ -48,12 +48,11 @@ struct AssignmentProvider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<AssignmentEntry>) -> Void) {
         Task {
-            let firstDayEnd = TACTStore.widgetFirstDayEnd
-            var entry = await WidgetBackgroundSync.shared.entry(firstDayEnd: firstDayEnd)
+            var entry = await WidgetBackgroundSync.shared.entry()
             entry.rooms = TimetableRooms.values
 
             let lastAttempt = entry.lastAttemptAt ?? entry.snapshot?.syncedAt ?? entry.date
-            let scheduled = WidgetSyncSchedule.nextAttempt(after: lastAttempt, at: entry.date, firstDayEnd: firstDayEnd)
+            let scheduled = WidgetSyncSchedule.nextAttempt(after: lastAttempt)
             let midnight = AcademicDay.nextDay(after: entry.date)
             let nextSync = entry.status == .signedOut ? midnight : max(entry.date.addingTimeInterval(5 * 60), scheduled)
             var displayDates = Set(entry.assignments.flatMap {

@@ -3,12 +3,6 @@ import WidgetKit
 
 @main
 struct TACTApp: App {
-    init() {
-        if TACTStore.recordFirstLaunch() {
-            WidgetCenter.shared.reloadTimelines(ofKind: "TACTAssignments")
-        }
-    }
-
     var body: some Scene {
         WindowGroup { AssignmentsView() }
     }
