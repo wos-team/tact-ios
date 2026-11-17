@@ -13,6 +13,17 @@ struct AssignmentEntry: TimelineEntry {
 
 private let urgentDeadlineInterval: TimeInterval = 3 * 60 * 60
 
+private extension WidgetFamily {
+    var isExtraLargePortrait: Bool {
+        if #available(iOS 27.0, *) { return self == .systemExtraLargePortrait }
+        return false
+    }
+
+    var showsSummaries: Bool {
+        self == .systemLarge || self == .systemExtraLarge || isExtraLargePortrait
+    }
+}
+
 enum SyncStatus {
     case signedOut
     case ready
@@ -96,7 +107,7 @@ struct AssignmentProvider: TimelineProvider {
             let today = TimetableDay(classes: timetable, at: entry.date)
             displayDates.formUnion(today.changeDates.filter { $0 > entry.date })
         }
-        if (family == .systemLarge || family == .systemExtraLarge || !Self.usesDynamicDates), entry.snapshot != nil {
+        if (family.showsSummaries || !Self.usesDynamicDates), entry.snapshot != nil {
             // Update static countdowns independently of TACT requests.
             let interval: TimeInterval = 5 * 60
             let offsets = stride(from: interval, to: nextSync.timeIntervalSince(entry.date), by: interval)
@@ -116,7 +127,7 @@ struct AssignmentProvider: TimelineProvider {
     }
 
     private func loadSummaries(into entry: inout AssignmentEntry, for family: WidgetFamily) {
-        guard family == .systemLarge || family == .systemExtraLarge, let snapshot = entry.snapshot, let account = snapshot.summaryAccount else { return }
+        guard family.showsSummaries, let snapshot = entry.snapshot, let account = snapshot.summaryAccount else { return }
         // Load a few extra entries so the next item can appear when a deadline passes.
         for assignment in snapshot.upcoming(at: entry.date).filter({ $0.isQuiz != true }).prefix(8) {
             entry.summaries[assignment.id] = AssignmentSummaryStore.preview(for: assignment, account: account)
@@ -131,9 +142,9 @@ struct AssignmentWidgetView: View {
 
     var body: some View {
         WidgetCard(entry: entry, compact: family == .systemSmall, large: family == .systemLarge,
-                   extraLarge: family == .systemExtraLarge)
+                   extraLarge: family == .systemExtraLarge, tall: family.isExtraLargePortrait)
             .containerBackground(WidgetPalette.background(colorScheme), for: .widget)
-            .widgetURL((family == .systemLarge || family == .systemExtraLarge)
+            .widgetURL(family.showsSummaries
                        ? entry.assignments.first(where: { $0.detailURL != nil })?.detailURL : nil)
     }
 }
@@ -158,6 +169,7 @@ struct WidgetCard: View {
     let compact: Bool
     var large = false
     var extraLarge = false
+    var tall = false
 
     private var displayCalendar: Calendar {
         var calendar = Calendar.current
@@ -166,7 +178,7 @@ struct WidgetCard: View {
     }
 
     var body: some View {
-        if large || extraLarge {
+        if large || extraLarge || tall {
             summaryCard
         } else {
             standardCard
@@ -234,7 +246,7 @@ struct WidgetCard: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
-                let assignments = Array(entry.assignments.prefix(extraLarge ? 6 : 3))
+                let assignments = Array(entry.assignments.prefix(extraLarge || tall ? 6 : 3))
                 if extraLarge && assignments.count > 1 {
                     let columnCount = (assignments.count + 1) / 2
                     HStack(alignment: .top, spacing: 14) {
@@ -248,7 +260,7 @@ struct WidgetCard: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else {
-                    summaryRows(assignments)
+                    summaryRows(assignments, lineLimit: tall && assignments.count > 4 ? 1 : nil)
                 }
                 Spacer(minLength: 0)
             }
@@ -257,8 +269,8 @@ struct WidgetCard: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func summaryRows(_ assignments: [Assignment]) -> some View {
-        let lines = assignments.count == 1 ? 8 : assignments.count == 2 ? 4 : 2
+    private func summaryRows(_ assignments: [Assignment], lineLimit: Int? = nil) -> some View {
+        let lines = lineLimit ?? (assignments.count == 1 ? 8 : assignments.count == 2 ? 4 : 2)
         return VStack(alignment: .leading, spacing: 6) {
             ForEach(assignments) { assignment in
                 if assignment.id != assignments.first?.id { Divider() }
@@ -446,13 +458,19 @@ struct WidgetCard: View {
 
 @main
 struct TACTWidget: Widget {
+    private var families: [WidgetFamily] {
+        let standard: [WidgetFamily] = [.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge]
+        if #available(iOS 27.0, *) { return standard + [.systemExtraLargePortrait] }
+        return standard
+    }
+
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "TACTAssignments", provider: AssignmentProvider()) { entry in
             AssignmentWidgetView(entry: entry)
         }
         .configurationDisplayName("TACTの課題・小テスト")
         .description("横長は今日の時間割、大サイズは締切が近い課題とその内容を表示します。")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
+        .supportedFamilies(families)
         .contentMarginsDisabled()
         .onBackgroundURLSessionEvents(matching: WidgetBackgroundSync.identifier) { _, completion in
             WidgetBackgroundSync.shared.receiveEvents(completion: completion)
