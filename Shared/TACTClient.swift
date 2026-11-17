@@ -220,7 +220,9 @@ enum TACTClient {
         }
     }
 
-    static func fetch(using session: TACTSession, started: Date, transport: @escaping Transport) async throws -> Snapshot {
+    static func fetch(
+        using session: TACTSession, started: Date, previous: Snapshot? = nil, transport: @escaping Transport
+    ) async throws -> Snapshot {
         // Schedule both read requests together when using the background transport.
         async let identityRequest = attempt {
             let identity: SessionResponse = try await load(
@@ -242,70 +244,79 @@ enum TACTClient {
             !$0.id.isEmpty && !$0.id.hasPrefix("~") && $0.type != "myworkspace" && knownSites.insert($0.id).inserted
         }
         let courses = Dictionary(uniqueKeysWithValues: sites.map { ($0.id, $0.title) })
-        let prior = TACTStore.snapshot(for: session.id)
+        let prior = previous.flatMap { $0.sessionID == session.id ? $0 : nil } ?? TACTStore.snapshot(for: session.id)
+        let cachedPlacements = prior?.quizPlacements ?? [:]
+        var quizPlacements = cachedPlacements.filter { courses[$0.key] != nil }
         var failedSites = Set<String>()
         var assignments: [Assignment] = []
         var firstFailure: TACTError?
         var successfulRequests = 0
         var hasPendingDownloads = false
 
-        for offset in stride(from: 0, to: sites.count, by: 4) {
-            try Task.checkCancellation()
-            let batch = sites[offset..<min(offset + 4, sites.count)]
-            try await withThrowingTaskGroup(of: CourseSync.self) { group in
-                for site in batch {
-                    group.addTask {
-                        let slug = encodePathSegment(site.id)
-                        let assignments = try await attempt {
-                            let response: AssignmentResponse = try await load(
-                                "/direct/assignment/site/\(slug).json?_limit=0",
-                                stage: "講義別の課題取得", using: session, transport: transport
-                            )
-                            return response.assignment_collection.compactMap { $0.assignment(courses: courses, at: started) }
-                        }
-                        let quizzes = try await attempt {
-                            try await loadQuizzes(site: site, slug: slug, date: started, using: session, transport: transport)
-                        }
-                        return CourseSync(site: site, assignments: assignments, quizzes: quizzes)
-                    }
+        let work = sites.flatMap { site in
+            [CourseWork(site: site, isQuiz: false), CourseWork(site: site, isQuiz: true)]
+        }
+        let loadCourse: @Sendable (CourseWork) async throws -> CourseResult = { work in
+            let site = work.site
+            let slug = encodePathSegment(site.id)
+            let result = try await attempt {
+                if work.isQuiz {
+                    return try await loadQuizzes(
+                        site: site, slug: slug, cachedPlacement: cachedPlacements[site.id],
+                        date: started, using: session, transport: transport
+                    )
                 }
-                for try await result in group {
-                    let previous = prior?.assignments.filter {
-                        $0.courseID.map { $0 == result.site.id } ?? ($0.course == result.site.title)
-                    } ?? []
+                let response: AssignmentResponse = try await load(
+                    "/direct/assignment/site/\(slug).json?_limit=0",
+                    stage: "講義別の課題取得", using: session, transport: transport
+                )
+                return CourseItems(entries: response.assignment_collection.compactMap {
+                    $0.assignment(courses: courses, at: started)
+                })
+            }
+            return CourseResult(work: work, result: result)
+        }
 
-                    switch result.assignments {
-                    case .success(let entries):
-                        successfulRequests += 1
-                        assignments += entries
-                    case .pending:
-                        hasPendingDownloads = true
-                    case .failure(let error):
-                        failedSites.insert(result.site.id)
-                        if firstFailure == nil { firstFailure = error }
-                        assignments += previous.filter { $0.isQuiz != true }
-                    }
+        try await withThrowingTaskGroup(of: CourseResult.self) { group in
+            var remaining = work.makeIterator()
+            // Keep the existing concurrency limit while removing waits between batches.
+            for _ in 0..<4 {
+                guard let item = remaining.next() else { break }
+                group.addTask { try await loadCourse(item) }
+            }
 
-                    switch result.quizzes {
-                    case .success(let sync):
-                        successfulRequests += 1
-                        if sync.submissionStatusUnavailable {
-                            failedSites.insert(result.site.id)
-                            let previouslySubmitted = Set(previous.filter { $0.isQuiz == true && $0.submitted }.map(\.id))
-                            assignments += sync.entries.map { entry in
-                                var entry = entry
-                                entry.submitted = entry.submitted || previouslySubmitted.contains(entry.id)
-                                return entry
-                            }
-                        } else {
-                            assignments += sync.entries
+            for try await completed in group {
+                try Task.checkCancellation()
+                if let item = remaining.next() {
+                    group.addTask { try await loadCourse(item) }
+                }
+
+                let site = completed.work.site
+                switch completed.result {
+                case .success(let items):
+                    successfulRequests += 1
+                    if let placement = items.quizPlacement { quizPlacements[site.id] = placement }
+                    if items.submissionStatusUnavailable {
+                        failedSites.insert(site.id)
+                        let submitted = Set((prior?.assignments ?? []).filter {
+                            $0.courseID == site.id && $0.isQuiz == true && $0.submitted
+                        }.map(\.id))
+                        assignments += items.entries.map { entry in
+                            var entry = entry
+                            entry.submitted = entry.submitted || submitted.contains(entry.id)
+                            return entry
                         }
-                    case .pending:
-                        hasPendingDownloads = true
-                    case .failure(let error):
-                        failedSites.insert(result.site.id)
-                        if firstFailure == nil { firstFailure = error }
-                        assignments += previous.filter { $0.isQuiz == true }
+                    } else {
+                        assignments += items.entries
+                    }
+                case .pending:
+                    hasPendingDownloads = true
+                case .failure(let error):
+                    failedSites.insert(site.id)
+                    if firstFailure == nil { firstFailure = error }
+                    assignments += (prior?.assignments ?? []).filter {
+                        ($0.isQuiz == true) == completed.work.isQuiz &&
+                            ($0.courseID.map { $0 == site.id } ?? ($0.course == site.title))
                     }
                 }
             }
@@ -319,19 +330,25 @@ enum TACTClient {
             syncedAt: .now,
             assignments: assignments.filter { seen.insert($0.id).inserted },
             failedCourseCount: failedSites.count,
-            startedAt: started
+            startedAt: started,
+            quizPlacements: quizPlacements
         )
     }
 
-    private struct CourseSync {
+    private struct CourseWork {
         let site: SiteResponse.Site
-        let assignments: FetchResult<[Assignment]>
-        let quizzes: FetchResult<QuizSync>
+        let isQuiz: Bool
     }
 
-    private struct QuizSync {
+    private struct CourseResult {
+        let work: CourseWork
+        let result: FetchResult<CourseItems>
+    }
+
+    private struct CourseItems {
         let entries: [Assignment]
-        let submissionStatusUnavailable: Bool
+        var submissionStatusUnavailable = false
+        var quizPlacement: String?
     }
 
     private enum FetchResult<Value> {
@@ -361,21 +378,24 @@ enum TACTClient {
     }
 
     private static func loadQuizzes(
-        site: SiteResponse.Site, slug: String, date: Date, using session: TACTSession, transport: Transport
-    ) async throws -> QuizSync {
+        site: SiteResponse.Site, slug: String, cachedPlacement: String?,
+        date: Date, using session: TACTSession, transport: Transport
+    ) async throws -> CourseItems {
         let response: QuizResponse = try await load(
             "/direct/sam_pub/context/\(slug).json", stage: "小テスト一覧の取得", using: session, transport: transport
         )
         let candidates = response.sam_pub_collection.compactMap { quiz in
             quiz.assignment(site: site, at: date).map { (quiz, $0) }
         }
-        guard !candidates.isEmpty else { return QuizSync(entries: [], submissionStatusUnavailable: false) }
+        guard !candidates.isEmpty else { return CourseItems(entries: []) }
 
         let verified = try await attempt {
-            try await quizSubmissions(site: site, slug: slug, using: session, transport: transport)
+            try await quizSubmissions(
+                site: site, slug: slug, cachedPlacement: cachedPlacement, using: session, transport: transport
+            )
         }
         switch verified {
-        case .success(let submitted):
+        case .success(let (submitted, placement)):
             // Older TACT pages only expose the title for tests without feedback links.
             let titleCounts = Dictionary(grouping: response.sam_pub_collection) {
                 SubmittedQuizzes.normalizedTitle($0.title)
@@ -392,32 +412,44 @@ enum TACTClient {
                 return !submitted.assessmentIDs.contains(quiz.assessmentID)
                     && titleCounts[title, default: 0] > 1 && submitted.titles.contains(title)
             }
-            return QuizSync(entries: entries, submissionStatusUnavailable: ambiguous)
+            return CourseItems(entries: entries, submissionStatusUnavailable: ambiguous, quizPlacement: placement)
         case .pending:
             throw TACTDownloadPending()
         case .failure:
-            return QuizSync(entries: candidates.map { $0.1 }, submissionStatusUnavailable: true)
+            return CourseItems(entries: candidates.map { $0.1 }, submissionStatusUnavailable: true)
         }
     }
 
     private static func quizSubmissions(
-        site: SiteResponse.Site, slug: String, using session: TACTSession, transport: Transport
-    ) async throws -> SubmittedQuizzes {
+        site: SiteResponse.Site, slug: String, cachedPlacement: String?,
+        using session: TACTSession, transport: Transport
+    ) async throws -> (SubmittedQuizzes, String) {
         let stage = "小テストの提出状態の確認"
-        var placement = site.sitePages?.compactMap(\.quizPlacement).first
-        if placement == nil {
-            let pages: [SiteResponse.Page] = try await load(
-                "/direct/site/\(slug)/pages.json", stage: stage, using: session, transport: transport
+        func read(_ placement: String) async throws -> (SubmittedQuizzes, String) {
+            let html = try await loadData(
+                "/portal/tool/\(encodePathSegment(placement))", stage: stage,
+                accept: "text/html", using: session, transport: transport
             )
-            placement = pages.compactMap(\.quizPlacement).first
+            guard let submitted = SubmittedQuizzes(html: html) else { throw TACTError.requestFailed(stage) }
+            return (submitted, placement)
         }
-        guard let placement, !placement.isEmpty else { throw TACTError.requestFailed(stage) }
-        let html = try await loadData(
-            "/portal/tool/\(encodePathSegment(placement))", stage: stage,
-            accept: "text/html", using: session, transport: transport
+
+        if let placement = site.sitePages?.compactMap(\.quizPlacement).first, !placement.isEmpty {
+            return try await read(placement)
+        }
+        if let cachedPlacement {
+            do {
+                return try await read(cachedPlacement)
+            } catch TACTError.requestFailed {
+                // A course can replace its tool. Rediscover the placement on a failed lookup.
+            }
+        }
+        let pages: [SiteResponse.Page] = try await load(
+            "/direct/site/\(slug)/pages.json", stage: stage, using: session, transport: transport
         )
-        guard let submitted = SubmittedQuizzes(html: html) else { throw TACTError.requestFailed(stage) }
-        return submitted
+        guard let placement = pages.compactMap(\.quizPlacement).first, !placement.isEmpty,
+              placement != cachedPlacement else { throw TACTError.requestFailed(stage) }
+        return try await read(placement)
     }
 
     private static func encodePathSegment(_ value: String) -> String {

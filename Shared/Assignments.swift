@@ -21,6 +21,7 @@ struct Snapshot: Codable {
     let assignments: [Assignment]
     var failedCourseCount: Int? = nil
     var startedAt: Date? = nil
+    var quizPlacements: [String: String]? = nil
 
     func upcoming(at date: Date) -> [Assignment] {
         assignments
