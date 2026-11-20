@@ -2,3 +2,11 @@
 DerivedData/
 xcuserdata/
 *.xcuserstate
+build/
+*.ipa
+*.xcarchive
+# signing secrets
+*.p12
+*.p8
+*.mobileprovision
+.env

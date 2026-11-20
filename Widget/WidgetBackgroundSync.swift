@@ -152,7 +152,7 @@ private final class WidgetDownloadReceiver: NSObject, URLSessionDownloadDelegate
 @MainActor
 final class WidgetBackgroundSync {
     static let shared = WidgetBackgroundSync()
-    static let identifier = "jp.matsuokakoki.tact-ios.widget.background-sync"
+    static let identifier = "com.wosteam.tact-ios.widget.background-sync"
 
     private static let maximumJobAge: TimeInterval = 30 * 60
     private let cookies = HTTPCookieStorage.sharedCookieStorage(forGroupContainerIdentifier: TACTStore.group)

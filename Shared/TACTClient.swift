@@ -57,7 +57,7 @@ struct WidgetSyncAttempt: Codable {
 }
 
 enum TACTStore {
-    static let group = "group.jp.matsuokakoki.tact-ios"
+    static let group = "group.com.wosteam.tact-ios"
     private static let widgetAttemptKey = "lastWidgetSyncAttempt"
 
     static var lastWidgetAttempt: WidgetSyncAttempt? {

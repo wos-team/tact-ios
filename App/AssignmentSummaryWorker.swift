@@ -20,7 +20,7 @@ final class SummaryBackgroundRegistration: NSObject, UIApplicationDelegate {
 
 @MainActor
 final class AssignmentSummaryWorker: ObservableObject {
-    nonisolated static let taskIdentifier = "jp.matsuokakoki.tact-ios.assignment-summaries"
+    nonisolated static let taskIdentifier = "com.wosteam.tact-ios.assignment-summaries"
     static let shared = AssignmentSummaryWorker()
 
     @Published private(set) var processing: String?

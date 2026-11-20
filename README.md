@@ -10,7 +10,7 @@ TACTの締切が近い未提出の課題・小テストを、iPhoneの課題一�
 ## 起動
 
 1. `TACT.xcodeproj` をXcodeで開きます。プロジェクトを再生成する場合は、XcodeGenを用意して `xcodegen generate` を実行します。
-2. `TACT` と `TACTWidget` の両ターゲットで同じ署名チームを選びます。両ターゲットに App Group `group.jp.matsuokakoki.tact-ios` を割り当てます。別のグループを使う場合は `project.yml` のグループ設定と `TACTStore.group` を揃え、プロジェクトを再生成してください。
+2. `TACT` と `TACTWidget` の両ターゲットで同じ署名チームを選びます。両ターゲットに App Group `group.com.wosteam.tact-ios` を割り当てます。別のグループを使う場合は `project.yml` のグループ設定と `TACTStore.group` を揃え、プロジェクトを再生成してください。
 3. iOS 17以降のiPhoneで `TACT` スキームを実行し、「TACTに接続」を開きます。
 4. iPhoneのホーム画面に「TACTの課題・小テスト」ウィジェットを追加します。
 

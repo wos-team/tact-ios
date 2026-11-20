@@ -8,7 +8,8 @@ settings:
     MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
     TARGETED_DEVICE_FAMILY: "1"
-    TACT_APP_GROUP: group.jp.matsuokakoki.tact-ios
+    TACT_APP_GROUP: group.com.wosteam.tact-ios
+    DEVELOPMENT_TEAM: 76XA5B7G8R
 targets:
   TACT:
     type: application
@@ -16,7 +17,7 @@ targets:
     sources: [App, Shared]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: jp.matsuokakoki.tact-ios
+        PRODUCT_BUNDLE_IDENTIFIER: com.wosteam.tact-ios
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: Configuration/TACT.plist
         INFOPLIST_KEY_CFBundleDisplayName: my tact
@@ -31,7 +32,7 @@ targets:
     sources: [Widget, Shared]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: jp.matsuokakoki.tact-ios.widget
+        PRODUCT_BUNDLE_IDENTIFIER: com.wosteam.tact-ios.widget
         INFOPLIST_FILE: Configuration/Widget.plist
         CODE_SIGN_ENTITLEMENTS: Configuration/TACT.entitlements
         SKIP_INSTALL: YES
